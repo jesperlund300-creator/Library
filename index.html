@@ -3836,8 +3836,8 @@ function getSubgenreValue(selectId, customId){
 
 // ── CLOUD SYNC (AUTO) ─────────────────────────────────────────
 // Uses JSONBin.io — free, no account needed, full CORS support
-const SYNC_API_BASE = 'https://api.jsonbin.io/v3/b';
-const SYNC_HEADERS = {'Content-Type':'application/json','X-Bin-Private':'false'};
+// JSONStore.io — free, no account, no API key, full CORS support
+const SYNC_API_BASE = 'https://www.jsonstore.io';
 
 let _syncBlobId = null;
 let _syncPushTimer = null;
@@ -3898,9 +3898,9 @@ async function autoPush(){
   _syncIsPushing=true;
   setSyncIndicator('☁ Syncing…');
   try{
-    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId,{
-      method:'PUT',
-      headers:SYNC_HEADERS,
+    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId+'/library',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify(buildSyncPayload())
     });
     if(!res.ok) throw new Error('HTTP '+res.status);
@@ -3926,9 +3926,10 @@ async function autoPoll(){
   if(Date.now()-_syncLastPushedAt<SYNC_POLL_INTERVAL) return;
   _syncIsPulling=true;
   try{
-    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId+'/latest',{headers:{'X-Bin-Meta':'false'}});
+    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId+'/library');
     if(!res.ok){ _syncIsPulling=false; return; }
-    const data=await res.json();
+    const json=await res.json();
+    const data=json.result||json;
     if(!data.BOOKS||!data._syncedAt){ _syncIsPulling=false; return; }
     const cloudTime=new Date(data._syncedAt).getTime();
     if(cloudTime>_syncLastPulledAt && cloudTime>_syncLastPushedAt){
@@ -3968,9 +3969,10 @@ async function syncPull(){
   setSyncStatus('Pulling…',false,true);
   document.getElementById('sync-pull-btn').disabled=true;
   try{
-    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId+'/latest',{headers:{'X-Bin-Meta':'false'}});
+    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId+'/library');
     if(!res.ok) throw new Error('HTTP '+res.status);
-    const data=await res.json();
+    const json=await res.json();
+    const data=json.result||json;
     if(!data.BOOKS||!Array.isArray(data.BOOKS)) throw new Error('Invalid data');
     const ok=confirm(`Replace local library with cloud data?\n\nCloud: ${data.BOOKS.length} books\nLocal: ${BOOKS.length} books`);
     if(!ok){ setSyncStatus('Cancelled.'); document.getElementById('sync-pull-btn').disabled=false; return; }
@@ -3985,15 +3987,15 @@ async function syncPull(){
 async function createSyncRoom(){
   setSyncStatus('Creating sync room…',false,true);
   try{
-    const res=await fetch(SYNC_API_BASE,{
+    // Generate a random room ID (UUID-style)
+    const id = crypto.randomUUID ? crypto.randomUUID() : 
+      ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
+    const res=await fetch(SYNC_API_BASE+'/'+id+'/library',{
       method:'POST',
-      headers:SYNC_HEADERS,
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify(buildSyncPayload())
     });
     if(!res.ok) throw new Error('Server error '+res.status);
-    const json=await res.json();
-    const id=json.metadata?.id;
-    if(!id) throw new Error('No ID returned');
     _syncBlobId=id; _syncLastPushedAt=Date.now();
     try{ localStorage.setItem('mlSyncId',id); }catch(e){}
     renderSyncModal(); startSyncPolling();
@@ -4006,9 +4008,10 @@ async function joinSyncRoom(){
   if(!input){ setSyncStatus('Paste a sync code first.',true); return; }
   setSyncStatus('Connecting…',false,true);
   try{
-    const res=await fetch(SYNC_API_BASE+'/'+input+'/latest',{headers:{'X-Bin-Meta':'false'}});
+    const res=await fetch(SYNC_API_BASE+'/'+input+'/library');
     if(!res.ok) throw new Error('Room not found');
-    const data=await res.json();
+    const json=await res.json();
+    const data=json.result||json;
     if(!data.BOOKS) throw new Error('Invalid data');
     _syncBlobId=input;
     try{ localStorage.setItem('mlSyncId',input); }catch(e){}
