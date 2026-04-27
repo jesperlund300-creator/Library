@@ -1,11 +1,7 @@
-// MyLibrary Service Worker
-const CACHE = 'mylibrary-v1';
-const ASSETS = ['/', '/MyLibrary.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+// MyLibrary Service Worker v2
+const CACHE = 'mylibrary-v2';
 
 self.addEventListener('install', e=>{
-  e.waitUntil(
-    caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{}))
-  );
   self.skipWaiting();
 });
 
@@ -19,17 +15,16 @@ self.addEventListener('activate', e=>{
 });
 
 self.addEventListener('fetch', e=>{
-  // Network first for HTML (get latest), cache fallback for offline
-  if(e.request.url.endsWith('.html') || e.request.url.endsWith('/')){
-    e.respondWith(
-      fetch(e.request)
-        .then(res=>{ caches.open(CACHE).then(c=>c.put(e.request,res.clone())); return res; })
-        .catch(()=>caches.match(e.request))
-    );
-    return;
-  }
-  // Cache first for everything else
+  if(!e.request.url.startsWith(self.location.origin)) return;
   e.respondWith(
-    caches.match(e.request).then(cached=>cached||fetch(e.request))
+    fetch(e.request)
+      .then(res=>{
+        if(res.ok){
+          const clone=res.clone();
+          caches.open(CACHE).then(c=>c.put(e.request,clone));
+        }
+        return res;
+      })
+      .catch(()=>caches.match(e.request))
   );
 });
