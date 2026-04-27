@@ -7216,37 +7216,70 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
   isbn=isbn.replace(/[^0-9X]/gi,'');
   if(!isbn){showLookupErr(target,'Please enter a valid ISBN.');return;}
   if(!fromCamera){showLookupSearching(target,true);}
+
+  let title='', author='', year='', genre='', subgenre='', coverId=null, pages=null, series, seriesNum;
+  let found = false;
+
+  // ── Try Google Books first ──────────────────────────────────
   try{
-    const res=await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
-    const data=await res.json();
-    const key=`ISBN:${isbn}`;
-    if(!data[key]) throw new Error('not found');
-    const book=data[key];
-    const title=book.title||'';
-    const author=(book.authors||[]).map(a=>a.name).join(', ');
-    const year=book.publish_date?book.publish_date.match(/\d{4}/)?.[0]||'':'';
-    const subjects=(book.subjects||[]).map(s=>typeof s==='string'?s:(s.name||''));
-    const {genre,subgenre}=guessGenreAndSubgenre(subjects);
-    const coverId=(book.covers||[])[0]||null;
-    let pages = book.number_of_pages || null;
+    const gbRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&fields=items(volumeInfo(title,authors,publishedDate,categories,imageLinks,pageCount,seriesInfo))`);
+    const gbData = await gbRes.json();
+    const vi = gbData?.items?.[0]?.volumeInfo;
+    if(vi){
+      title = vi.title||'';
+      author = (vi.authors||[]).join(', ');
+      year = vi.publishedDate?.slice(0,4)||'';
+      pages = vi.pageCount||null;
+      const thumb = vi.imageLinks?.thumbnail||vi.imageLinks?.smallThumbnail||null;
+      // Convert thumbnail URL to cover ID isn't possible — store ISBN for cover
+      const subjects = vi.categories||[];
+      const g = guessGenreAndSubgenre(subjects);
+      genre = g.genre; subgenre = g.subgenre;
+      // Series from Google Books
+      const si = vi.seriesInfo;
+      if(si){
+        series = si.shortSeriesBookTitle||undefined;
+        seriesNum = si.volumeSeries?.[0]?.orderNumber!=null ? parseFloat(si.volumeSeries[0].orderNumber) : undefined;
+      }
+      found = true;
+    }
+  }catch(e){}
 
-    // Google Books: series info + page count fallback
-    const gbData = await fetchSeriesFromGoogleBooks('isbn:'+isbn);
-    if(!pages && gbData?.pages) pages = gbData.pages;
-    const series = gbData?.series || undefined;
-    const seriesNum = gbData?.seriesNum != null ? gbData.seriesNum : undefined;
+  // ── Try Open Library as fallback or to enrich ───────────────
+  try{
+    const olRes = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+    const olData = await olRes.json();
+    const key = `ISBN:${isbn}`;
+    if(olData[key]){
+      const book = olData[key];
+      if(!title) title = book.title||'';
+      if(!author) author = (book.authors||[]).map(a=>a.name).join(', ');
+      if(!year && book.publish_date) year = book.publish_date.match(/\d{4}/)?.[0]||'';
+      if(!pages) pages = book.number_of_pages||null;
+      coverId = (book.covers||[])[0]||null;
+      if(!genre){
+        const subjects = (book.subjects||[]).map(s=>typeof s==='string'?s:(s.name||''));
+        const g = guessGenreAndSubgenre(subjects);
+        genre = g.genre; subgenre = g.subgenre;
+      }
+      found = true;
+    }
+  }catch(e){}
 
-    pendingResult={...pendingResult,title,author,year,genre,subgenre,isbn,coverId,
-      pages:pages||undefined, series, seriesNum};
+  if(!found){
     if(!fromCamera){
       showLookupSearching(target,false);
-      showISBNResult(pendingResult, target);
+      showLookupErr(target,'Book not found. Try searching by title instead.');
     }
-  }catch(e){
-    if(!fromCamera){
-      showLookupSearching(target,false);
-      showLookupErr(target,'Book not found. Try the ISBN or title search.');
-    }
+    return;
+  }
+
+  pendingResult={...pendingResult, title, author, year, genre, subgenre, isbn, coverId,
+    pages:pages||undefined, series, seriesNum};
+
+  if(!fromCamera){
+    showLookupSearching(target,false);
+    showISBNResult(pendingResult, target);
   }
 }
 async function lookupISBN(){
