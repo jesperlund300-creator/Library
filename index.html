@@ -54,10 +54,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);dis
 
 /* bottom tab bar */
 .tabbar{display:none;height:calc(var(--tabbar) + env(safe-area-inset-bottom, 0px));background:var(--sidebar);border-top:1px solid var(--border);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom, 0px)}
-.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:transparent;font-family:'DM Sans',sans-serif;color:var(--text);cursor:pointer;padding:8px 4px;min-height:48px;transition:color .12s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:transparent;font-family:'DM Sans',sans-serif;color:var(--text);cursor:pointer;padding:6px 2px;min-height:48px;transition:color .12s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;min-width:0;overflow:hidden}
 .tab-btn.active{color:var(--gold)}
-.tab-icon{font-size:22px;line-height:1}
-.tab-label{font-size:10px;letter-spacing:.3px}
+.tab-icon{font-size:18px;line-height:1;flex-shrink:0}
+.tab-label{font-size:9px;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 
 .main{flex:1;overflow-y:auto;overflow-x:hidden;padding:26px 30px;-webkit-overflow-scrolling:touch;min-width:0;max-width:100%}
 .main::-webkit-scrollbar{width:5px}
@@ -656,7 +656,36 @@ textarea{resize:vertical;min-height:88px;width:100%}
 .heatmap-day-labels{display:flex;flex-direction:column;gap:3px;margin-right:6px;padding-top:0}
 
 
-/* ── GAME PAGE ─────────────────────────────────────────────── */
+/* ── INSIGHTS SUB-TABS ─────────────────────────────────────── */
+.insights-subtab-bar{
+  display:flex;gap:6px;padding:12px 0 16px;overflow-x:auto;
+  scrollbar-width:none;flex-shrink:0;
+}
+.insights-subtab-bar::-webkit-scrollbar{display:none}
+.insights-tab{
+  padding:7px 14px;border-radius:20px;border:1.5px solid var(--border);
+  background:transparent;color:var(--muted);font-size:13px;
+  font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .12s;
+  white-space:nowrap;flex-shrink:0;touch-action:manipulation;
+}
+.insights-tab.active{border-color:var(--gold);background:var(--gold-glow);color:var(--gold)}
+/* ── CENTER ADD BUTTON ─────────────────────────────────────── */
+.tab-add-btn{
+  position:relative;flex:0 0 64px;
+}
+.tab-add-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:48px;height:48px;border-radius:50%;
+  background:var(--gold);color:#13110e;
+  font-size:26px;font-weight:300;line-height:1;
+  box-shadow:0 2px 12px rgba(201,160,90,.5);
+  margin-top:-16px;
+  transition:transform .15s;
+}
+.tab-add-btn:hover .tab-add-icon,.tab-add-btn:active .tab-add-icon{transform:scale(1.1)}
+.tab-add-btn.active .tab-add-icon{transform:scale(0.95)}
+
+
 .game-section{margin-bottom:28px}
 .game-section-title{font-size:13px;font-weight:500;color:var(--text);margin:0 0 12px;display:flex;align-items:center;gap:8px}
 .badge-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px}
@@ -1162,7 +1191,9 @@ textarea{resize:vertical;min-height:88px;width:100%}
 /* responsive */
 @media(max-width:900px){
   .sidebar{display:none}
-  .tabbar{display:flex}
+  .tabbar{display:flex;overflow-x:auto;scrollbar-width:none}
+  .tabbar::-webkit-scrollbar{display:none}
+  @media(max-width:400px){.tab-label{display:none}.tab-btn{padding:10px 4px}}
   .main{padding:10px 10px;padding-bottom:calc(var(--tabbar) + env(safe-area-inset-bottom, 0px) + 10px)}
   .stats{grid-template-columns:1fr 1fr}
   .bc-header{flex-direction:column;gap:10px}
@@ -1212,15 +1243,13 @@ textarea{resize:vertical;min-height:88px;width:100%}
     </div>
     <span class="sb-section">Browse</span>
     <div class="nav-item active" onclick="go('collection',this)"><span class="nav-icon">📚</span> Collection</div>
-    <div class="nav-item" onclick="go('tierlist',this)"><span class="nav-icon">🏆</span> Tier list</div>
     <div class="nav-item" onclick="go('authors',this)"><span class="nav-icon">✍️</span> Authors</div>
-    <div class="nav-item" onclick="go('members',this)"><span class="nav-icon">👥</span> Members</div>
     <div class="nav-item" onclick="go('reading',this)"><span class="nav-icon">📖</span> Reading</div>
-    <div class="nav-item" onclick="go('stats',this)"><span class="nav-icon">📊</span> Stats</div>
-    <div class="nav-item" onclick="go('personal',this)"><span class="nav-icon">🙋</span> Personal</div>
-    <div class="nav-item" onclick="go('game',this)"><span class="nav-icon">🎮</span> Game</div>
+    <div class="nav-item" onclick="go('insights',this)"><span class="nav-icon">📊</span> Insights</div>
     <span class="sb-section">Manage</span>
     <div class="nav-item" onclick="go('add',this)"><span class="nav-icon">＋</span> Add book</div>
+    <div class="nav-item" onclick="go('members',this)"><span class="nav-icon">👥</span> Members</div>
+    <div class="nav-item" onclick="openSettingsModal()"><span class="nav-icon">⚙️</span> Settings</div>
     <div class="sb-bottom"><div class="book-count" id="sb-count">0 books</div></div>
   </aside>
 
@@ -1235,7 +1264,10 @@ textarea{resize:vertical;min-height:88px;width:100%}
             <div class="col-hero-title">My Library</div>
             <div class="col-hero-sub" id="col-sub">All your books in one place</div>
           </div>
-          <button class="btn-ghost" id="bc-style-toggle" onclick="toggleBcStyleBar()" style="font-size:12px;padding:7px 14px;flex-shrink:0">🎨 Style</button>
+          <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+            <button class="btn-ghost" id="bc-style-toggle" onclick="toggleBcStyleBar()" style="font-size:12px;padding:7px 14px">🎨 Style</button>
+            <button class="btn-ghost" onclick="openSettingsModal()" style="font-size:18px;padding:6px 10px;line-height:1" title="Settings">⚙️</button>
+          </div>
         </div>
         <!-- Ambient stat pills -->
         <div id="col-hero-stats" class="col-hero-stats"></div>
@@ -1297,6 +1329,17 @@ textarea{resize:vertical;min-height:88px;width:100%}
         </div>
       </div>
       </div>
+    </div>
+
+    <!-- INSIGHTS PAGE — wraps stats, personal, game, tierlist as sub-tabs -->
+    <div class="page" id="page-insights">
+      <div class="insights-subtab-bar">
+        <button class="insights-tab active" id="itab-stats"     onclick="setInsightsTab('stats')">📊 Stats</button>
+        <button class="insights-tab"         id="itab-personal" onclick="setInsightsTab('personal')">🙋 Personal</button>
+        <button class="insights-tab"         id="itab-game"     onclick="setInsightsTab('game')">🎮 Game</button>
+        <button class="insights-tab"         id="itab-tierlist" onclick="setInsightsTab('tierlist')">🏆 Tier list</button>
+      </div>
+      <div id="insights-content"></div>
     </div>
 
     <div class="page" id="page-tierlist">
@@ -1570,32 +1613,17 @@ textarea{resize:vertical;min-height:88px;width:100%}
   <button class="tab-btn active" id="tab-collection" onclick="goTab('collection')">
     <span class="tab-icon">📚</span><span class="tab-label">Collection</span>
   </button>
-  <button class="tab-btn" id="tab-tierlist" onclick="goTab('tierlist')">
-    <span class="tab-icon">🏆</span><span class="tab-label">Tier list</span>
-  </button>
   <button class="tab-btn" id="tab-authors" onclick="goTab('authors')">
     <span class="tab-icon">✍️</span><span class="tab-label">Authors</span>
   </button>
-  <button class="tab-btn" id="tab-members" onclick="goTab('members')">
-    <span class="tab-icon">👥</span><span class="tab-label">Members</span>
+  <button class="tab-btn tab-add-btn" id="tab-add" onclick="goTab('add')">
+    <span class="tab-add-icon">＋</span>
   </button>
   <button class="tab-btn" id="tab-reading" onclick="goTab('reading')">
     <span class="tab-icon">📖</span><span class="tab-label">Reading</span>
   </button>
-  <button class="tab-btn" id="tab-stats" onclick="goTab('stats')">
-    <span class="tab-icon">📊</span><span class="tab-label">Stats</span>
-  </button>
-  <button class="tab-btn" id="tab-personal" onclick="goTab('personal')">
-    <span class="tab-icon">🙋</span><span class="tab-label">Me</span>
-  </button>
-  <button class="tab-btn" id="tab-game" onclick="goTab('game')">
-    <span class="tab-icon">🎮</span><span class="tab-label">Game</span>
-  </button>
-  <button class="tab-btn" id="tab-add" onclick="goTab('add')">
-    <span class="tab-icon">＋</span><span class="tab-label">Add</span>
-  </button>
-  <button class="tab-btn" onclick="showSaveModal()">
-    <span class="tab-icon">💾</span><span class="tab-label">Save</span>
+  <button class="tab-btn" id="tab-insights" onclick="goTab('insights')">
+    <span class="tab-icon">📊</span><span class="tab-label">Insights</span>
   </button>
 </div>
 
@@ -1878,6 +1906,31 @@ textarea{resize:vertical;min-height:88px;width:100%}
   </div>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div class="overlay" id="settings-modal" onclick="if(event.target===this)closeSettingsModal()" style="align-items:center">
+  <div class="modal" style="max-width:420px;max-height:85vh;overflow-y:auto">
+    <div class="drag-handle"></div>
+    <h3>⚙️ Settings</h3>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn-ghost" style="text-align:left;padding:14px 16px;font-size:14px;border-radius:var(--rl)" onclick="closeSettingsModal();goNav('members')">
+        👥 <strong>Members</strong> <span style="color:var(--muted);font-size:12px;margin-left:8px">Add or manage members</span>
+      </button>
+      <button class="btn-ghost" style="text-align:left;padding:14px 16px;font-size:14px;border-radius:var(--rl)" onclick="closeSettingsModal();openSyncModal()">
+        ☁️ <strong>Sync</strong> <span style="color:var(--muted);font-size:12px;margin-left:8px">${_syncBlobId?'Connected':'Set up sync between devices'}</span>
+      </button>
+      <button class="btn-ghost" style="text-align:left;padding:14px 16px;font-size:14px;border-radius:var(--rl)" onclick="closeSettingsModal();showSaveModal()">
+        💾 <strong>Save file</strong> <span style="color:var(--muted);font-size:12px;margin-left:8px">Download a backup</span>
+      </button>
+      <button class="btn-ghost" style="text-align:left;padding:14px 16px;font-size:14px;border-radius:var(--rl)" onclick="closeSettingsModal();openBookcaseSetup()">
+        🗄️ <strong>Bookcases</strong> <span style="color:var(--muted);font-size:12px;margin-left:8px">Configure physical bookcases</span>
+      </button>
+    </div>
+    <div style="margin-top:16px;text-align:center">
+      <button class="btn-ghost" style="font-size:13px" onclick="closeSettingsModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- SYNC MODAL -->
 <div class="overlay" id="sync-modal" onclick="if(event.target===this)closeSyncModal()" style="align-items:center">
   <div class="modal" style="max-width:420px">
@@ -2055,14 +2108,14 @@ function go(page,el){
 }
 function goNav(page){
   const items=document.querySelectorAll('.nav-item');
-  const pages=['collection','tierlist','authors','members','reading','stats','personal','game','add'];
+  const pages=['collection','authors','reading','insights','add'];
   items.forEach((n,i)=>n.classList.toggle('active', pages[i]===page));
   go(page, null);
 }
 function goTab(page){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   const tb=document.getElementById('tab-'+page); if(tb) tb.classList.add('active');
-  document.querySelectorAll('.nav-item').forEach((n,i)=>n.classList.toggle('active',['collection','tierlist','authors','members','reading','stats','personal','game','add'][i]===page));
+  document.querySelectorAll('.nav-item').forEach((n,i)=>n.classList.toggle('active',['collection','authors','reading','insights','add'][i]===page));
   showPage(page);
   document.getElementById('main-scroll').scrollTop=0;
 }
@@ -2075,9 +2128,7 @@ function showPage(page){
   if(page==='authors') renderAuthors();
   if(page==='members') renderMembers();
   if(page==='reading') renderReading();
-  if(page==='stats') renderStats();
-  if(page==='personal') renderPersonal();
-  if(page==='game') renderGame();
+  if(page==='insights') renderInsights();
   if(page==='add') { renderAddTierRows(); refreshSeriesSuggestions(); }
 }
 
@@ -5289,6 +5340,49 @@ function renderYearVoteSection(m){
       }).join('')}`}`;
   return div;
 }
+
+// ── INSIGHTS PAGE ────────────────────────────────────────────
+let _insightsTab = 'stats';
+
+function renderInsights(){
+  setInsightsTab(_insightsTab, true);
+}
+
+function setInsightsTab(tab, force=false){
+  _insightsTab = tab;
+  document.querySelectorAll('.insights-tab').forEach(b=>{
+    b.classList.toggle('active', b.id==='itab-'+tab);
+  });
+
+  // Move the real page divs into insights-content and show them
+  const container = document.getElementById('insights-content');
+  if(!container) return;
+
+  // Pages to manage
+  const subPages = ['stats','personal','game','tierlist'];
+  subPages.forEach(p=>{
+    const pageEl = document.getElementById('page-'+p);
+    if(!pageEl) return;
+    // Move into container if not already there
+    if(pageEl.parentElement !== container) container.appendChild(pageEl);
+    pageEl.style.display = p===tab ? 'block' : 'none';
+  });
+
+  // Render the active one
+  if(tab==='stats') renderStats();
+  else if(tab==='personal') renderPersonal();
+  else if(tab==='game') renderGame();
+  else if(tab==='tierlist') renderTierList();
+}
+
+// ── SETTINGS MODAL ───────────────────────────────────────────
+function openSettingsModal(){
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettingsModal(){
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
 
 function setPersonalTab(tab){
   _personalTab = tab;
