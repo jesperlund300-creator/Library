@@ -3835,16 +3835,19 @@ function getSubgenreValue(selectId, customId){
 
 
 // ── CLOUD SYNC (AUTO) ─────────────────────────────────────────
-const SYNC_API = 'https://jsonblob.com/api/jsonBlob';
+// Uses JSONBin.io — free, no account needed, full CORS support
+const SYNC_API_BASE = 'https://api.jsonbin.io/v3/b';
+const SYNC_HEADERS = {'Content-Type':'application/json','X-Bin-Private':'false'};
+
 let _syncBlobId = null;
-let _syncPushTimer = null;       // debounce timer for auto-push
-let _syncPollTimer = null;       // interval for auto-pull polling
-let _syncLastPushedAt = 0;       // ms timestamp of our last push
-let _syncLastPulledAt = 0;       // ms timestamp of our last pull
+let _syncPushTimer = null;
+let _syncPollTimer = null;
+let _syncLastPushedAt = 0;
+let _syncLastPulledAt = 0;
 let _syncIsPushing = false;
 let _syncIsPulling = false;
-const SYNC_PUSH_DEBOUNCE = 4000; // push 4s after last change
-const SYNC_POLL_INTERVAL = 30000; // check cloud every 30s
+const SYNC_PUSH_DEBOUNCE = 4000;
+const SYNC_POLL_INTERVAL = 30000;
 
 function openSyncModal(){
   try { _syncBlobId = localStorage.getItem('mlSyncId')||null; } catch(e){}
@@ -3879,13 +3882,11 @@ function setSyncStatus(msg, isErr=false, persist=false){
   if(!persist&&msg) setTimeout(()=>{ if(el.textContent===msg) el.textContent=''; },5000);
 }
 
-// Show sync status in the save indicator bar too
 function setSyncIndicator(msg){
   const el=document.getElementById('save-ind');
   if(el&&msg){ el.textContent=msg; el.className='save-ind ok'; }
 }
 
-// ── AUTO-PUSH: debounce on every markSaved call ──
 function scheduleAutoPush(){
   if(!_syncBlobId) return;
   clearTimeout(_syncPushTimer);
@@ -3897,23 +3898,19 @@ async function autoPush(){
   _syncIsPushing=true;
   setSyncIndicator('☁ Syncing…');
   try{
-    const res=await fetch(SYNC_API+'/'+_syncBlobId,{
+    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId,{
       method:'PUT',
-      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      headers:SYNC_HEADERS,
       body:JSON.stringify(buildSyncPayload())
     });
     if(!res.ok) throw new Error('HTTP '+res.status);
     _syncLastPushedAt=Date.now();
     setSyncIndicator('☁ Synced ✓');
     setTimeout(()=>{ const e=document.getElementById('save-ind'); if(e&&e.textContent==='☁ Synced ✓') e.textContent=''; },2000);
-    setSyncStatus(`Auto-pushed at ${new Date().toLocaleTimeString()}`);
-  }catch(e){
-    setSyncStatus('Auto-push failed: '+e.message, true);
-  }
+  }catch(e){ setSyncStatus('Auto-push failed: '+e.message, true); }
   _syncIsPushing=false;
 }
 
-// ── AUTO-PULL: poll cloud every 30s for newer data ──
 function startSyncPolling(){
   stopSyncPolling();
   if(!_syncBlobId) return;
@@ -3926,90 +3923,81 @@ function stopSyncPolling(){
 
 async function autoPoll(){
   if(!_syncBlobId||_syncIsPushing||_syncIsPulling) return;
-  // Don't poll if pushed very recently (our own push would look like remote change)
   if(Date.now()-_syncLastPushedAt<SYNC_POLL_INTERVAL) return;
   _syncIsPulling=true;
   try{
-    const res=await fetch(SYNC_API+'/'+_syncBlobId,{headers:{'Accept':'application/json'}});
+    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId+'/latest',{headers:{'X-Bin-Meta':'false'}});
     if(!res.ok){ _syncIsPulling=false; return; }
     const data=await res.json();
-    if(!data.BOOKS||!data._syncedAt) { _syncIsPulling=false; return; }
+    if(!data.BOOKS||!data._syncedAt){ _syncIsPulling=false; return; }
     const cloudTime=new Date(data._syncedAt).getTime();
-    // Only apply if cloud is newer than our last pull
     if(cloudTime>_syncLastPulledAt && cloudTime>_syncLastPushedAt){
-      // Apply silently — no confirm needed for auto-pull
-      BOOKS=data.BOOKS;
-      if(data.MEMBERS) MEMBERS=data.MEMBERS;
-      if(data.SHELVES) SHELVES=data.SHELVES;
-      if(data.BOOKCASES) BOOKCASES=data.BOOKCASES;
-    if(data.FAVOURITE_AUTHORS) FAVOURITE_AUTHORS=data.FAVOURITE_AUTHORS;
-      if(data.GAMIFICATION) GAMIFICATION=data.GAMIFICATION;
-      if(data.RECOMMENDATIONS) RECOMMENDATIONS=data.RECOMMENDATIONS;
-      if(data.FAVOURITE_AUTHORS) FAVOURITE_AUTHORS=data.FAVOURITE_AUTHORS;
-      if(data.GAMIFICATION) GAMIFICATION=data.GAMIFICATION;
-      if(data.RECOMMENDATIONS) RECOMMENDATIONS=data.RECOMMENDATIONS;
+      applyCloudData(data);
       _syncLastPulledAt=Date.now();
+      saveToLocalStorage();
       const page=document.querySelector('.page.active')?.id?.replace('page-','');
       if(page==='collection') renderBookcase();
       else if(page==='members') renderMembers();
       else if(page==='reading') renderReading();
       setSyncIndicator('☁ Pulled ✓');
-      setSyncStatus(`Auto-pulled at ${new Date().toLocaleTimeString()} (${data.BOOKS.length} books)`);
       setTimeout(()=>{ const e=document.getElementById('save-ind'); if(e&&e.textContent==='☁ Pulled ✓') e.textContent=''; },2000);
     }
-  }catch(e){/* silent fail on poll */}
+  }catch(e){}
   _syncIsPulling=false;
 }
 
-// ── MANUAL PUSH / PULL (still available in modal) ──
+function applyCloudData(data){
+  if(data.BOOKS) BOOKS=data.BOOKS;
+  if(data.MEMBERS) MEMBERS=data.MEMBERS;
+  if(data.SHELVES) SHELVES=data.SHELVES;
+  if(data.BOOKCASES) BOOKCASES=data.BOOKCASES;
+  if(data.FAVOURITE_AUTHORS) FAVOURITE_AUTHORS=data.FAVOURITE_AUTHORS;
+  if(data.GAMIFICATION) GAMIFICATION=data.GAMIFICATION;
+  if(data.RECOMMENDATIONS) RECOMMENDATIONS=data.RECOMMENDATIONS;
+}
+
 async function syncPush(){
   if(!_syncBlobId){ setSyncStatus('Create or join a sync room first.',true,true); return; }
-  setSyncStatus('Pushing…',false,true); document.getElementById('sync-push-btn').disabled=true;
+  document.getElementById('sync-push-btn').disabled=true;
   await autoPush();
   document.getElementById('sync-push-btn').disabled=false;
 }
 
 async function syncPull(){
   if(!_syncBlobId){ setSyncStatus('Create or join a sync room first.',true,true); return; }
-  setSyncStatus('Pulling…',false,true); document.getElementById('sync-pull-btn').disabled=true;
+  setSyncStatus('Pulling…',false,true);
+  document.getElementById('sync-pull-btn').disabled=true;
   try{
-    const res=await fetch(SYNC_API+'/'+_syncBlobId,{headers:{'Accept':'application/json'}});
+    const res=await fetch(SYNC_API_BASE+'/'+_syncBlobId+'/latest',{headers:{'X-Bin-Meta':'false'}});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     if(!data.BOOKS||!Array.isArray(data.BOOKS)) throw new Error('Invalid data');
-    const ok=confirm(`Replace local library with cloud data?\n\nCloud: ${data.BOOKS.length} books · synced ${data._syncedAt||'?'}\nLocal: ${BOOKS.length} books`);
+    const ok=confirm(`Replace local library with cloud data?\n\nCloud: ${data.BOOKS.length} books\nLocal: ${BOOKS.length} books`);
     if(!ok){ setSyncStatus('Cancelled.'); document.getElementById('sync-pull-btn').disabled=false; return; }
-    BOOKS=data.BOOKS;
-    if(data.MEMBERS) MEMBERS=data.MEMBERS;
-    if(data.SHELVES) SHELVES=data.SHELVES;
-    if(data.BOOKCASES) BOOKCASES=data.BOOKCASES;
-    if(data.FAVOURITE_AUTHORS) FAVOURITE_AUTHORS=data.FAVOURITE_AUTHORS;
-      if(data.GAMIFICATION) GAMIFICATION=data.GAMIFICATION;
-      if(data.RECOMMENDATIONS) RECOMMENDATIONS=data.RECOMMENDATIONS;
+    applyCloudData(data);
     _syncLastPulledAt=Date.now();
     markSaved(); renderBookcase();
-    setSyncStatus(`✓ Pulled — ${BOOKS.length} books loaded.`);
+    setSyncStatus('✓ Pulled — '+BOOKS.length+' books loaded.');
   }catch(e){ setSyncStatus('Pull failed: '+e.message,true); }
   document.getElementById('sync-pull-btn').disabled=false;
 }
 
-// ── CREATE / JOIN ──
 async function createSyncRoom(){
   setSyncStatus('Creating sync room…',false,true);
   try{
-    const res=await fetch(SYNC_API,{
+    const res=await fetch(SYNC_API_BASE,{
       method:'POST',
-      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      headers:SYNC_HEADERS,
       body:JSON.stringify(buildSyncPayload())
     });
     if(!res.ok) throw new Error('Server error '+res.status);
-    const loc=res.headers.get('X-jsonblob')||res.headers.get('Location')||'';
-    const id=loc.split('/').pop();
+    const json=await res.json();
+    const id=json.metadata?.id;
     if(!id) throw new Error('No ID returned');
     _syncBlobId=id; _syncLastPushedAt=Date.now();
     try{ localStorage.setItem('mlSyncId',id); }catch(e){}
     renderSyncModal(); startSyncPolling();
-    setSyncStatus('✓ Sync room created! Auto-sync is now active.',false,true);
+    setSyncStatus('✓ Sync room created! Share the code above.',false,true);
   }catch(e){ setSyncStatus('Failed: '+e.message,true,true); }
 }
 
@@ -4018,7 +4006,7 @@ async function joinSyncRoom(){
   if(!input){ setSyncStatus('Paste a sync code first.',true); return; }
   setSyncStatus('Connecting…',false,true);
   try{
-    const res=await fetch(SYNC_API+'/'+input,{headers:{'Accept':'application/json'}});
+    const res=await fetch(SYNC_API_BASE+'/'+input+'/latest',{headers:{'X-Bin-Meta':'false'}});
     if(!res.ok) throw new Error('Room not found');
     const data=await res.json();
     if(!data.BOOKS) throw new Error('Invalid data');
@@ -4026,8 +4014,7 @@ async function joinSyncRoom(){
     try{ localStorage.setItem('mlSyncId',input); }catch(e){}
     document.getElementById('sync-code-input').value='';
     renderSyncModal(); startSyncPolling();
-    setSyncStatus(`✓ Connected! ${data.BOOKS.length} books in cloud — pulling now…`,false,true);
-    // Auto-pull immediately on join
+    setSyncStatus('✓ Connected! Pulling data…',false,true);
     _syncLastPulledAt=0; _syncLastPushedAt=0;
     await autoPoll();
   }catch(e){ setSyncStatus('Failed: '+e.message,true,true); }
@@ -4049,12 +4036,8 @@ function copySyncCode(){
 }
 
 function buildSyncPayload(){
-  // Sync everything except visual style (colours/grain stay local per device via localStorage)
-  return {
-    BOOKS, MEMBERS, SHELVES, BOOKCASES, FAVOURITE_AUTHORS, GAMIFICATION, RECOMMENDATIONS,
-    _syncedAt: new Date().toISOString(),
-    _device: navigator.platform||'unknown'
-  };
+  return { BOOKS, MEMBERS, SHELVES, BOOKCASES, FAVOURITE_AUTHORS, GAMIFICATION, RECOMMENDATIONS,
+    _syncedAt: new Date().toISOString(), _device: navigator.platform||'unknown' };
 }
 
 // Init: load saved ID and start polling
