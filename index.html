@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>MyLibrary</title>
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -23,6 +23,7 @@
   --r:8px;--rl:12px;--tabbar:64px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+button,select,input,[onclick]{touch-action:manipulation;cursor:pointer}
 html,body{height:100%;overflow:hidden}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh}
 
@@ -52,8 +53,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);dis
 .book-count span{color:var(--gold);font-weight:500}
 
 /* bottom tab bar */
-.tabbar{display:none;height:var(--tabbar);background:var(--sidebar);border-top:1px solid var(--border);flex-shrink:0}
-.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:transparent;font-family:'DM Sans',sans-serif;color:var(--text);cursor:pointer;padding:8px 4px;min-height:var(--tabbar);transition:color .12s}
+.tabbar{display:none;height:calc(var(--tabbar) + env(safe-area-inset-bottom, 0px));background:var(--sidebar);border-top:1px solid var(--border);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom, 0px)}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:transparent;font-family:'DM Sans',sans-serif;color:var(--text);cursor:pointer;padding:8px 4px;min-height:48px;transition:color .12s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .tab-btn.active{color:var(--gold)}
 .tab-icon{font-size:22px;line-height:1}
 .tab-label{font-size:10px;letter-spacing:.3px}
@@ -507,7 +508,7 @@ textarea{resize:vertical;min-height:88px;width:100%}
 .empty p{color:var(--muted);font-size:14px}
 .empty small{color:var(--faint);font-size:12px;display:block;margin-top:4px}
 
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:flex-end;justify-content:center;z-index:300;backdrop-filter:blur(6px)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:flex-end;justify-content:center;z-index:1000;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);touch-action:manipulation}
 .overlay.open{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;padding:24px;width:100%;max-width:640px;max-height:92vh;overflow-y:auto;animation:slideUp .2s ease;-webkit-overflow-scrolling:touch}
 @keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
@@ -1162,7 +1163,7 @@ textarea{resize:vertical;min-height:88px;width:100%}
 @media(max-width:900px){
   .sidebar{display:none}
   .tabbar{display:flex}
-  .main{padding:10px 10px;padding-bottom:calc(var(--tabbar) + 10px)}
+  .main{padding:10px 10px;padding-bottom:calc(var(--tabbar) + env(safe-area-inset-bottom, 0px) + 10px)}
   .stats{grid-template-columns:1fr 1fr}
   .bc-header{flex-direction:column;gap:10px}
   .bc-header .stats{width:100%}
