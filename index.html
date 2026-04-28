@@ -7194,7 +7194,7 @@ function guessGenre(subjects){
 async function fetchSeriesFromGoogleBooks(query){
   // query can be 'isbn:XXXX' or 'intitle:Title+inauthor:Author'
   try{
-    const url = 'https://www.googleapis.com/books/v1/volumes?q='
+    const url = 'https://www.googleapis.com/books/v1/volumes?key=AIzaSyAclk0_KdNJmjcb92YUZDILs8eMy9mxXmk&q='
       + encodeURIComponent(query)
       + '&fields=items(volumeInfo(title,seriesInfo,pageCount))&maxResults=1';
     const res = await fetch(url);
@@ -7222,7 +7222,7 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
 
   // ── Try Google Books first ──────────────────────────────────
   try{
-    const gbRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&fields=items(volumeInfo(title,authors,publishedDate,categories,imageLinks,pageCount,seriesInfo))`);
+    const gbRes = await fetch(`https://www.googleapis.com/books/v1/volumes?key=AIzaSyAclk0_KdNJmjcb92YUZDILs8eMy9mxXmk&q=isbn:${isbn}&fields=items(volumeInfo(title,authors,publishedDate,categories,imageLinks,pageCount,seriesInfo))`);
     const gbData = await gbRes.json();
     const vi = gbData?.items?.[0]?.volumeInfo;
     if(vi){
