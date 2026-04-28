@@ -3809,13 +3809,13 @@ async function startBarcodeLoop(){
 
       stopCamera();
 
-      // Switch to the manual entry panel so result can be shown
-      switchScanPanel('manual');
+      // Switch to ISBN tab so result can be shown
+      switchScanTab('isbn', document.getElementById('stab-isbn'));
       // Pre-fill the ISBN field
       const isbnInp = document.getElementById('isbn-input');
       if(isbnInp) isbnInp.value = isbn;
 
-      fetchByISBN(isbn, false, 'scan');
+      fetchByISBN(isbn, false, 'isbn');
     }).catch(()=>{ scanning=false; scanLoop=requestAnimationFrame(tick); });
   }
   scanLoop=requestAnimationFrame(tick);
@@ -4600,7 +4600,7 @@ let rblMemberFilter = null; // null = all members
 async function findNextInSeries(seriesName, nextNum, author){
   openScan();
   setTimeout(async ()=>{
-    switchScanPanel('title');
+    switchScanTab('title', document.getElementById('stab-title'));
     const q = `${seriesName} ${nextNum}`;
     const titleInp = document.getElementById('title-input');
     if(titleInp) titleInp.value = q;
