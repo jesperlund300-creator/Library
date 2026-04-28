@@ -7242,22 +7242,25 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
   let title='', author='', year='', genre='', subgenre='', coverId=null, pages=null, series, seriesNum;
   let found = false;
 
-  // ── Try Google Books first ──────────────────────────────────
-  try{
-    const gbRes = await fetch(`https://www.googleapis.com/books/v1/volumes?key=AIzaSyAclk0_KdNJmjcb92YUZDILs8eMy9mxXmk&q=isbn:${isbn}&fields=items(volumeInfo(title,authors,publishedDate,categories,imageLinks,pageCount,seriesInfo))`);
-    const gbData = await gbRes.json();
-    const vi = gbData?.items?.[0]?.volumeInfo;
+  // Run Google Books and Open Library in parallel
+  const [gbResult, olResult] = await Promise.allSettled([
+    fetch(`https://www.googleapis.com/books/v1/volumes?key=AIzaSyAclk0_KdNJmjcb92YUZDILs8eMy9mxXmk&q=isbn:${isbn}&fields=items(volumeInfo(title,authors,publishedDate,categories,imageLinks,pageCount,seriesInfo))`)
+      .then(r=>r.json()),
+    fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`)
+      .then(r=>r.json())
+  ]);
+
+  // Apply Google Books data
+  if(gbResult.status==='fulfilled'){
+    const vi = gbResult.value?.items?.[0]?.volumeInfo;
     if(vi){
       title = vi.title||'';
       author = (vi.authors||[]).join(', ');
       year = vi.publishedDate?.slice(0,4)||'';
       pages = vi.pageCount||null;
-      const thumb = vi.imageLinks?.thumbnail||vi.imageLinks?.smallThumbnail||null;
-      // Convert thumbnail URL to cover ID isn't possible — store ISBN for cover
       const subjects = vi.categories||[];
       const g = guessGenreAndSubgenre(subjects);
       genre = g.genre; subgenre = g.subgenre;
-      // Series from Google Books
       const si = vi.seriesInfo;
       if(si){
         series = si.shortSeriesBookTitle||undefined;
@@ -7265,15 +7268,13 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
       }
       found = true;
     }
-  }catch(e){}
+  }
 
-  // ── Try Open Library as fallback or to enrich ───────────────
-  try{
-    const olRes = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
-    const olData = await olRes.json();
-    const key = `ISBN:${isbn}`;
-    if(olData[key]){
-      const book = olData[key];
+  // Apply Open Library data (fills gaps or overrides if GB failed)
+  if(olResult.status==='fulfilled'){
+    const key=`ISBN:${isbn}`;
+    const book = olResult.value?.[key];
+    if(book){
       if(!title) title = book.title||'';
       if(!author) author = (book.authors||[]).map(a=>a.name).join(', ');
       if(!year && book.publish_date) year = book.publish_date.match(/\d{4}/)?.[0]||'';
@@ -7286,7 +7287,7 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
       }
       found = true;
     }
-  }catch(e){}
+  }
 
   if(!found){
     if(!fromCamera){
