@@ -3809,13 +3809,18 @@ async function startBarcodeLoop(){
 
       stopCamera();
 
-      // Switch to ISBN tab so result can be shown
+      // Switch to ISBN tab and pre-fill — let user verify before auto-looking up
       switchScanTab('isbn', document.getElementById('stab-isbn'));
-      // Pre-fill the ISBN field
       const isbnInp = document.getElementById('isbn-input');
       if(isbnInp) isbnInp.value = isbn;
 
-      fetchByISBN(isbn, false, 'isbn');
+      // Show a confirm banner — barcode readers sometimes misread digits
+      const isbnErr = document.getElementById('scan-err-isbn');
+      if(isbnErr){
+        isbnErr.style.display='block';
+        isbnErr.style.color='var(--gold)';
+        isbnErr.innerHTML=`📷 Scanned: <strong>${isbn}</strong> — does this look correct? <button onclick="fetchByISBN('${isbn}',false,'isbn');this.parentElement.style.display='none'" style="margin-left:8px;padding:4px 12px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-glow);color:var(--gold);font-size:12px;cursor:pointer">✓ Look up</button> <button onclick="document.getElementById('isbn-input').focus();this.parentElement.style.display='none'" style="margin-left:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer">✎ Edit</button>`;
+      }
     }).catch(()=>{ scanning=false; scanLoop=requestAnimationFrame(tick); });
   }
   scanLoop=requestAnimationFrame(tick);
@@ -7235,8 +7240,29 @@ async function fetchSeriesFromGoogleBooks(query){
 }
 
 async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
-  isbn=isbn.replace(/[^0-9X]/gi,'');
+  isbn=isbn.replace(/[^0-9X]/gi,'').toUpperCase();
   if(!isbn){showLookupErr(target,'Please enter a valid ISBN.');return;}
+
+  // Convert ISBN-10 to ISBN-13
+  if(isbn.length===10){
+    const isbn13base='978'+isbn.slice(0,9);
+    const check=(10-isbn13base.split('').reduce((s,d,i)=>s+(i%2===0?parseInt(d):parseInt(d)*3),0)%10)%10;
+    isbn='978'+isbn.slice(0,9)+check;
+  }
+
+  // Validate ISBN-13 checksum
+  if(isbn.length===13){
+    const digits=isbn.split('').map(Number);
+    const check=(10-digits.slice(0,12).reduce((s,d,i)=>s+(i%2===0?d:d*3),0)%10)%10;
+    if(check!==digits[12]){
+      showLookupErr(target,`ISBN checksum invalid — scanner may have misread a digit. Got: ${isbn}`);
+      return;
+    }
+  } else if(isbn.length!==10){
+    showLookupErr(target,`ISBN must be 10 or 13 digits. Got ${isbn.length} digits.`);
+    return;
+  }
+
   if(!fromCamera){showLookupSearching(target,true);}
 
   let title='', author='', year='', genre='', subgenre='', coverId=null, pages=null, series, seriesNum;
