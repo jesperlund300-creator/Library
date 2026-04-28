@@ -3735,113 +3735,103 @@ async function startBarcodeLoop(){
   const canvas=document.createElement('canvas');
   const ctx=canvas.getContext('2d');
   let lastISBN='', lastTime=0;
-  let scanning=false; // prevent concurrent decode calls
+  let scanning=false;
 
-  // Update status to show it's actively scanning
   const statusEl=document.getElementById('scan-live-status');
   if(statusEl) statusEl.textContent='Hold the barcode inside the frame…';
 
-  // ── Set up detector ONCE before the loop starts ──
+  // Native BarcodeDetector (Android Chrome/Samsung, Safari iOS17+) — most accurate
   let nativeDetector=null;
-  let zxingReader=null;
-
   if(window.BarcodeDetector){
     try{
-      const fmts=await BarcodeDetector.getSupportedFormats();
-      const want=['ean_13','ean_8','upc_a','upc_e','code_128','code_39'];
-      const supported=want.filter(f=>fmts.includes(f));
-      nativeDetector=new BarcodeDetector({formats:supported.length?supported:fmts});
+      const fmts=await BarcodeDetector.getSupportedFormats().catch(()=>[]);
+      const want=['ean_13','ean_8','upc_a','upc_e','code_128'];
+      const use=want.filter(f=>fmts.includes(f));
+      nativeDetector=new BarcodeDetector({formats:use.length?use:['ean_13','ean_8','upc_a']});
     }catch(_){}
   }
 
+  // ZXing only if native unavailable
+  let zxingReader=null;
   if(!nativeDetector){
-    // Preload ZXing before starting, create reader once
     try{
       await loadZXing();
       const hints=new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
-        ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.UPC_A,  ZXing.BarcodeFormat.UPC_E,
-        ZXing.BarcodeFormat.CODE_128,
-      ]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
       zxingReader=new ZXing.BrowserMultiFormatReader(hints);
-    }catch(e){
-      if(statusEl) statusEl.textContent='Could not load barcode scanner library.';
-      return;
-    }
+    }catch(e){ if(statusEl) statusEl.textContent='Could not load barcode scanner.'; return; }
   }
 
-  // ── Scan loop: throttle to ~5fps so decode has time to complete ──
   let frameCount=0;
   function tick(){
     if(!scanStream) return;
     frameCount++;
-    // Only attempt decode every 6th frame (~5fps at 30fps video, ~10fps at 60fps)
-    if(frameCount % 6 !== 0){ scanLoop=requestAnimationFrame(tick); return; }
+    if(frameCount%4!==0){ scanLoop=requestAnimationFrame(tick); return; }
     if(scanning){ scanLoop=requestAnimationFrame(tick); return; }
-    if(video.readyState < video.HAVE_ENOUGH_DATA){ scanLoop=requestAnimationFrame(tick); return; }
+    if(video.readyState<video.HAVE_ENOUGH_DATA){ scanLoop=requestAnimationFrame(tick); return; }
 
     canvas.width=video.videoWidth;
     canvas.height=video.videoHeight;
     ctx.drawImage(video,0,0);
 
-    // Crop to viewfinder zone only (centre 70% wide, 24% tall) and 2x upscale + contrast boost
-    const _cx=Math.round(canvas.width*0.15), _cy=Math.round(canvas.height*0.38);
-    const _cw=Math.round(canvas.width*0.70), _ch=Math.round(canvas.height*0.24);
-    const cropC=document.createElement('canvas');
-    cropC.width=_cw*2; cropC.height=_ch*2;
-    const cropCtx=cropC.getContext('2d');
-    cropCtx.imageSmoothingEnabled=false;
-    cropCtx.drawImage(canvas,_cx,_cy,_cw,_ch,0,0,_cw*2,_ch*2);
-    // Contrast boost — helps faded barcodes
-    const imgD=cropCtx.getImageData(0,0,cropC.width,cropC.height);
-    const dd=imgD.data;
-    for(let i=0;i<dd.length;i+=4){
-      const g=(dd[i]*0.299+dd[i+1]*0.587+dd[i+2]*0.114);
-      const b=Math.min(255,Math.max(0,(g-128)*1.8+128));
-      dd[i]=dd[i+1]=dd[i+2]=b; dd[i+3]=255;
-    }
-    cropCtx.putImageData(imgD,0,0);
-
     scanning=true;
-    decodeFrame(cropC, nativeDetector, zxingReader).then(isbn=>{
+
+    // Use video element directly for native — gives best results on mobile
+    const decodePromise = nativeDetector
+      ? nativeDetector.detect(video)
+          .then(r=>r&&r.length?r[0].rawValue:nativeDetector.detect(canvas).then(r2=>r2&&r2.length?r2[0].rawValue:null))
+          .catch(()=>null)
+      : decodeWithZXing(canvas, zxingReader);
+
+    decodePromise.then(isbn=>{
       scanning=false;
       if(!isbn){ scanLoop=requestAnimationFrame(tick); return; }
 
       const now=Date.now();
-      if(isbn===lastISBN && now-lastTime < 3000){ scanLoop=requestAnimationFrame(tick); return; }
+      if(isbn===lastISBN&&now-lastTime<3000){ scanLoop=requestAnimationFrame(tick); return; }
       lastISBN=isbn; lastTime=now;
 
-      // Found! Show feedback and look up
       const lineEl=document.getElementById('scan-vf-line');
       if(lineEl) lineEl.classList.add('found');
-      if(statusEl){ statusEl.textContent='✓ Found! Looking up…'; statusEl.className='scan-live-status found'; }
-
-      // Grab frame as cover photo
-      const snap=document.createElement('canvas');
-      snap.width=canvas.width; snap.height=canvas.height;
-      snap.getContext('2d').drawImage(canvas,0,0);
-      pendingResult={coverPhoto:snap.toDataURL('image/jpeg',0.8)};
+      if(statusEl){ statusEl.textContent='✓ Found! Verifying…'; statusEl.className='scan-live-status found'; }
 
       stopCamera();
-
-      // Switch to ISBN tab and pre-fill — let user verify before auto-looking up
       switchScanTab('isbn', document.getElementById('stab-isbn'));
-      const isbnInp = document.getElementById('isbn-input');
-      if(isbnInp) isbnInp.value = isbn;
+      const isbnInp=document.getElementById('isbn-input');
+      if(isbnInp) isbnInp.value=isbn;
 
-      // Show a confirm banner — barcode readers sometimes misread digits
-      const isbnErr = document.getElementById('scan-err-isbn');
+      const isbnErr=document.getElementById('scan-err-isbn');
       if(isbnErr){
         isbnErr.style.display='block';
         isbnErr.style.color='var(--gold)';
-        isbnErr.innerHTML=`📷 Scanned: <strong>${isbn}</strong> — does this look correct? <button onclick="fetchByISBN('${isbn}',false,'isbn');this.parentElement.style.display='none'" style="margin-left:8px;padding:4px 12px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-glow);color:var(--gold);font-size:12px;cursor:pointer">✓ Look up</button> <button onclick="document.getElementById('isbn-input').focus();this.parentElement.style.display='none'" style="margin-left:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer">✎ Edit</button>`;
+        const lookupBtn=document.createElement('button');
+        lookupBtn.textContent='✓ Look up';
+        lookupBtn.style.cssText='margin-left:8px;padding:4px 12px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-glow);color:var(--gold);font-size:12px;cursor:pointer';
+        lookupBtn.onclick=()=>{ isbnErr.style.display='none'; fetchByISBN(isbn,false,'isbn'); };
+        const editBtn=document.createElement('button');
+        editBtn.textContent='✎ Edit';
+        editBtn.style.cssText='margin-left:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer';
+        editBtn.onclick=()=>{ isbnErr.style.display='none'; document.getElementById('isbn-input')?.focus(); };
+        isbnErr.innerHTML='';
+        const span=document.createElement('span');
+        span.innerHTML='📷 Scanned: <strong>'+isbn+'</strong> — correct?';
+        isbnErr.appendChild(span);
+        isbnErr.appendChild(lookupBtn);
+        isbnErr.appendChild(editBtn);
       }
     }).catch(()=>{ scanning=false; scanLoop=requestAnimationFrame(tick); });
   }
   scanLoop=requestAnimationFrame(tick);
 }
+
+async function decodeWithZXing(canvas, reader){
+  try{ return reader.decodeFromCanvas(canvas).getText(); }catch(_){}
+  const cc=cropCanvas(canvas,0.1,0.3,0.8,0.4);
+  try{ return reader.decodeFromCanvas(cc).getText(); }catch(_){}
+  return null;
+}
+
 
 async function decodeFrame(canvas, nativeDetector, zxingReader){
   if(nativeDetector){
