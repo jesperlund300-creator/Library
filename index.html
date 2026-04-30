@@ -1927,9 +1927,33 @@ textarea{resize:vertical;min-height:88px;width:100%}
       <button class="btn-ghost" style="text-align:left;padding:14px 16px;font-size:14px;border-radius:var(--rl)" onclick="closeSettingsModal();openBookcaseSetup()">
         🗄️ <strong>Bookcases</strong> <span style="color:var(--muted);font-size:12px;margin-left:8px">Configure physical bookcases</span>
       </button>
+      <button class="btn-ghost" style="text-align:left;padding:14px 16px;font-size:14px;border-radius:var(--rl)" onclick="closeSettingsModal();openGenreManager()">
+        🏷️ <strong>Genres</strong> <span style="color:var(--muted);font-size:12px;margin-left:8px">Add custom genres & sub-genres</span>
+      </button>
     </div>
     <div style="margin-top:16px;text-align:center">
       <button class="btn-ghost" style="font-size:13px" onclick="closeSettingsModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- GENRE MANAGER MODAL -->
+<div class="overlay" id="genre-modal" onclick="if(event.target===this)closeGenreManager()" style="align-items:center">
+  <div class="modal" style="max-width:480px;max-height:88vh;overflow-y:auto">
+    <div class="drag-handle"></div>
+    <h3>🏷️ Genre Manager</h3>
+    <p style="font-size:13px;color:var(--muted);margin:8px 0 16px">Built-in genres are always available. Add your own custom genres and sub-genres below.</p>
+    <div id="genre-manager-content"></div>
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">➕ Add new genre</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="new-genre-input" placeholder="e.g. Cooking, Sports…" style="flex:1;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px"
+          onkeydown="if(event.key==='Enter')addCustomGenre()">
+        <button class="btn-primary" onclick="addCustomGenre()" style="padding:8px 16px;font-size:13px">Add</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn-ghost" onclick="closeGenreManager()">Done</button>
     </div>
   </div>
 </div>
@@ -2005,6 +2029,7 @@ var BOOKCASES = /*BOOKCASES_START*/[]/*BOOKCASES_END*/;
 var FAVOURITE_AUTHORS = /*FAV_AUTHORS_START*/{}/*FAV_AUTHORS_END*/;
 var GAMIFICATION = /*GAME_START*/{}/*GAME_END*/;
 var RECOMMENDATIONS = /*RECS_START*/[]/*RECS_END*/;
+var CUSTOM_GENRES = /*CUSTOM_GENRES_START*/{}/*CUSTOM_GENRES_END*/;
 
 const TIERS=['S','A','B','C','D'];
 const TM={
@@ -3414,9 +3439,10 @@ function downloadSelf(){
     updated=updated.replace(/\/\*MEMBERS_START\*\/.*?\/\*MEMBERS_END\*\//s,'/*MEMBERS_START*/[]/*MEMBERS_END*/');
     updated=updated.replace(/\/\*SHELVES_START\*\/.*?\/\*SHELVES_END\*\//s,'/*SHELVES_START*/[]/*SHELVES_END*/');
     updated=updated.replace(/\/\*BOOKCASES_START\*\/.*?\/\*BOOKCASES_END\*\//s,'/*BOOKCASES_START*/[]/*BOOKCASES_END*/');
-    updated=updated.replace(/\/\*FAV_AUTHORS_START\*\/.*?\/\*FAV_AUTHORS_END\*\//s,'/*FAV_AUTHORS_START*/{}/*FAV_AUTHORS_END*/');
-    updated=updated.replace(/\/\*GAME_START\*\/.*?\/\*GAME_END\*\//s,'/*GAME_START*/{}/*GAME_END*/');
-    updated=updated.replace(/\/\*RECS_START\*\/.*?\/\*RECS_END\*\//s,'/*RECS_START*/[]/*RECS_END*/');
+    updated=updated.replace(/\/\*FAV_AUTHORS_START\*\/.*?\/\*FAV_AUTHORS_END\*\//s,'/*FAV_AUTHORS_START*/'+JSON.stringify(FAVOURITE_AUTHORS)+'/*FAV_AUTHORS_END*/');
+    updated=updated.replace(/\/\*GAME_START\*\/.*?\/\*GAME_END\*\//s,'/*GAME_START*/'+JSON.stringify(GAMIFICATION)+'/*GAME_END*/');
+    updated=updated.replace(/\/\*RECS_START\*\/.*?\/\*RECS_END\*\//s,'/*RECS_START*/'+JSON.stringify(RECOMMENDATIONS)+'/*RECS_END*/');
+    updated=updated.replace(/\/\*CUSTOM_GENRES_START\*\/.*?\/\*CUSTOM_GENRES_END\*\//s,'/*CUSTOM_GENRES_START*/'+JSON.stringify(CUSTOM_GENRES)+'/*CUSTOM_GENRES_END*/');
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([updated],{type:'text/html'}));
     a.download='MyLibrary.html';a.click();closeSaveModal();
@@ -3877,37 +3903,51 @@ document.addEventListener('click', e=>{
 
 // ── SUBGENRE MAP ──────────────────────────────────────────────
 const SUBGENRES = {
-  'Fantasy':          ['Epic fantasy','Dark fantasy','Urban fantasy','Portal fantasy','Fairy tale','Grimdark','Sword & sorcery','Cosy fantasy','Mythic fantasy','Other'],
-  'Science fiction':  ['Space opera','Hard sci-fi','Cyberpunk','Dystopian','Military sci-fi','Biopunk','Solarpunk','Time travel','First contact','Soft sci-fi','Other'],
-  'Mystery':          ['Whodunit','Cosy mystery','Noir','Police procedural','Legal thriller','Amateur sleuth','Historical mystery','Other'],
-  'Thriller':         ['Psychological thriller','Spy thriller','Political thriller','Tech thriller','Legal thriller','Medical thriller','Action thriller','Other'],
-  'Romance':          ['Historical romance','Contemporary romance','Paranormal romance','Romantic comedy','Slow burn','Dark romance','Other'],
-  'Horror':           ['Supernatural horror','Psychological horror','Gothic horror','Cosmic horror','Slasher','Body horror','Other'],
+  'Fantasy':           ['Epic fantasy','Dark fantasy','Urban fantasy','Portal fantasy','Fairy tale','Grimdark','Sword & sorcery','Cosy fantasy','Mythic fantasy','Other'],
+  'Science fiction':   ['Space opera','Hard sci-fi','Cyberpunk','Dystopian','Military sci-fi','Biopunk','Solarpunk','Time travel','First contact','Soft sci-fi','Other'],
+  'Mystery':           ['Whodunit','Cosy mystery','Noir','Police procedural','Legal thriller','Amateur sleuth','Historical mystery','Other'],
+  'Thriller':          ['Psychological thriller','Spy thriller','Political thriller','Tech thriller','Legal thriller','Medical thriller','Action thriller','Other'],
+  'Romance':           ['Historical romance','Contemporary romance','Paranormal romance','Romantic comedy','Slow burn','Dark romance','Other'],
+  'Horror':            ['Supernatural horror','Psychological horror','Gothic horror','Cosmic horror','Slasher','Body horror','Other'],
   'Historical fiction':['19th century','Ancient world','Medieval','WW1','WW2','Renaissance','Cold War','Other'],
-  'Literary fiction': ['Coming-of-age','Modernist','Existentialist','Magical realism','Stream of consciousness','Epistolary','Satirical','Other'],
-  'Non-fiction':      ['Essays','Journalism','Social history','Psychology','Philosophy','True crime','Travel','Popular science','Other'],
-  'Biography':        ['Autobiography','Memoir','Political biography','Sports biography','Other'],
-  'Self-help':        ['Productivity','Mindfulness','Finance','Relationships','Health & fitness','Other'],
-  'Philosophy':       ['Eastern philosophy','Western philosophy','Ethics','Political philosophy','Existentialism','Stoicism','Other'],
-  'Science':          ['Physics','Biology','Chemistry','Astronomy','Mathematics','Neuroscience','Popular science','Other'],
-  'History':          ['Ancient history','Military history','Social history','Economic history','Art history','Other'],
-  'Poetry':           ['Lyric','Epic','Narrative','Haiku','Contemporary','Other'],
-  'Graphic novel':    ['Superhero','Manga','Literary','Memoir','Fantasy','Sci-fi','Other'],
+  'Literary fiction':  ['Coming-of-age','Modernist','Existentialist','Magical realism','Stream of consciousness','Epistolary','Satirical','Other'],
+  'Non-fiction':       ['Essays','Journalism','Social history','Psychology','Philosophy','True crime','Travel','Popular science','Other'],
+  'Biography':         ['Autobiography','Memoir','Political biography','Sports biography','Other'],
+  'Self-help':         ['Productivity','Mindfulness','Finance','Relationships','Health & fitness','Other'],
+  'Philosophy':        ['Eastern philosophy','Western philosophy','Ethics','Political philosophy','Existentialism','Stoicism','Other'],
+  'Science':           ['Physics','Biology','Chemistry','Astronomy','Mathematics','Neuroscience','Popular science','Other'],
+  'History':           ['Ancient history','Military history','Social history','Economic history','Art history','Other'],
+  'Poetry':            ['Lyric','Epic','Narrative','Haiku','Contemporary','Other'],
+  'Graphic novel':     ['Superhero','Manga','Literary','Memoir','Fantasy','Sci-fi','Other'],
+  'Young adult':       ['YA Fantasy','YA Romance','YA Thriller','YA Sci-fi','YA Contemporary','YA Horror','YA Historical','Other'],
+  'IT & Technology':   ['Programming','Databases','SQL','Web development','Cybersecurity','Networking','AI & Machine learning','Data science','Software architecture','Other'],
 };
+
+// Returns merged built-in + custom genres, sorted alphabetically
+function getAllGenres(){
+  const builtin = getAllGenres();
+  const custom = Object.keys(CUSTOM_GENRES||{});
+  return [...new Set([...builtin, ...custom])].sort((a,b)=>a.localeCompare(b));
+}
+
+// Returns subgenres for a genre (built-in + custom)
+function getSubgenres(genre){
+  const builtin = SUBGENRES[genre]||[];
+  const custom = (CUSTOM_GENRES||{})[genre]?.subgenres||[];
+  return [...new Set([...builtin.filter(o=>o!=='Other'), ...custom, 'Other'])];
+}
 
 function populateSubgenreSelect(selectId, genreSelectId, currentValue){
   const sel = document.getElementById(selectId);
   const customInp = document.getElementById(selectId.replace('subgenre','subgenre-custom'));
   if(!sel) return;
   const genre = document.getElementById(genreSelectId)?.value || '';
-  const opts = SUBGENRES[genre] || [];
-  // Build options including existing books' subgenres for this genre
+  const opts = getSubgenres(genre);
   const existing = [...new Set(BOOKS.filter(b=>b.genre===genre&&b.subgenre).map(b=>b.subgenre))];
   const all = [...new Set([...opts.filter(o=>o!=='Other'), ...existing, 'Other'])];
   sel.innerHTML = '<option value="">— Select sub-genre —</option>' +
     all.map(o=>`<option value="${esc(o)}"${o===currentValue?' selected':''}>${esc(o)}</option>`).join('') +
     (currentValue && !all.includes(currentValue) ? `<option value="${esc(currentValue)}" selected>${esc(currentValue)}</option>` : '');
-  // Show custom input if current value is not in list
   if(customInp){
     const isCustom = currentValue && !all.includes(currentValue);
     customInp.style.display = (sel.value==='Other'||isCustom) ? '' : 'none';
@@ -4135,7 +4175,7 @@ function copySyncCode(){
 }
 
 function buildSyncPayload(){
-  return { BOOKS, MEMBERS, SHELVES, BOOKCASES, FAVOURITE_AUTHORS, GAMIFICATION, RECOMMENDATIONS,
+  return { BOOKS, MEMBERS, SHELVES, BOOKCASES, FAVOURITE_AUTHORS, GAMIFICATION, RECOMMENDATIONS, CUSTOM_GENRES,
     _syncedAt: new Date().toISOString(), _device: navigator.platform||'unknown' };
 }
 
@@ -5387,7 +5427,95 @@ function renderYearVoteSection(m){
   return div;
 }
 
-// ── INSIGHTS PAGE ────────────────────────────────────────────
+// ── GENRE MANAGER ────────────────────────────────────────────
+function openGenreManager(){
+  document.getElementById('genre-modal').classList.add('open');
+  renderGenreManager();
+}
+function closeGenreManager(){ document.getElementById('genre-modal').classList.remove('open'); }
+
+function renderGenreManager(){
+  const el = document.getElementById('genre-manager-content');
+  if(!el) return;
+  const customGenres = Object.keys(CUSTOM_GENRES||{}).sort();
+  const builtinGenres = Object.keys(SUBGENRES).sort();
+
+  el.innerHTML = customGenres.length ? `
+    <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Your custom genres</div>
+    ${customGenres.map(g=>`
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:14px;color:var(--text);font-weight:500">${esc(g)}</span>
+          <button onclick="deleteCustomGenre('${esc(g)}')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 6px" title="Delete genre">✕</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+          ${(CUSTOM_GENRES[g]?.subgenres||[]).map(s=>`
+            <span style="display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;background:var(--surface);border:1px solid var(--border);font-size:11px;color:var(--muted)">
+              ${esc(s)}
+              <button onclick="deleteCustomSubgenre('${esc(g)}','${esc(s)}')" style="background:none;border:none;color:var(--faint);font-size:11px;cursor:pointer;padding:0;line-height:1">✕</button>
+            </span>`).join('')}
+        </div>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="sub-input-${esc(g)}" placeholder="Add sub-genre…"
+            style="flex:1;padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px"
+            onkeydown="if(event.key==='Enter')addCustomSubgenre('${esc(g)}')">
+          <button onclick="addCustomSubgenre('${esc(g)}')" style="padding:5px 12px;border-radius:var(--r);border:1px solid var(--gold);background:var(--gold-glow);color:var(--gold);font-size:12px;cursor:pointer">+ Add</button>
+        </div>
+      </div>`).join('')}
+    <div style="border-top:1px solid var(--border);margin:8px 0"></div>` : '';
+
+  el.innerHTML += `<div style="font-size:12px;color:var(--faint);margin-bottom:4px">Built-in genres (${builtinGenres.length}): ${builtinGenres.join(', ')}</div>`;
+}
+
+function addCustomGenre(){
+  const inp = document.getElementById('new-genre-input');
+  const name = inp?.value?.trim();
+  if(!name){ inp?.focus(); return; }
+  if(SUBGENRES[name]||CUSTOM_GENRES[name]){ alert(`"${name}" already exists.`); return; }
+  if(!CUSTOM_GENRES) CUSTOM_GENRES={};
+  CUSTOM_GENRES[name]={subgenres:[]};
+  inp.value='';
+  markSaved(); renderGenreManager();
+  // Refresh genre dropdowns
+  refreshGenreDropdowns();
+}
+
+function deleteCustomGenre(name){
+  if(!confirm(`Delete genre "${name}"? Books using it will keep the genre name but it won't appear in dropdowns.`)) return;
+  delete CUSTOM_GENRES[name];
+  markSaved(); renderGenreManager(); refreshGenreDropdowns();
+}
+
+function addCustomSubgenre(genre){
+  const inp = document.getElementById('sub-input-'+genre);
+  const name = inp?.value?.trim();
+  if(!name){ inp?.focus(); return; }
+  if(!CUSTOM_GENRES[genre]) CUSTOM_GENRES[genre]={subgenres:[]};
+  if(!CUSTOM_GENRES[genre].subgenres.includes(name)){
+    CUSTOM_GENRES[genre].subgenres.push(name);
+    markSaved(); renderGenreManager();
+  }
+  if(inp) inp.value='';
+}
+
+function deleteCustomSubgenre(genre, sub){
+  if(!CUSTOM_GENRES[genre]) return;
+  CUSTOM_GENRES[genre].subgenres = CUSTOM_GENRES[genre].subgenres.filter(s=>s!==sub);
+  markSaved(); renderGenreManager();
+}
+
+function refreshGenreDropdowns(){
+  // Refresh all visible genre selects
+  ['f-genre','n-genre','e-genre'].forEach(id=>{
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = (id==='f-genre'?'<option value="">All genres</option>':'<option value="">Select genre</option>')
+      + getAllGenres().map(g=>`<option value="${esc(g)}"${g===prev?' selected':''}>${esc(g)}</option>`).join('');
+  });
+}
+
+
 let _insightsTab = 'stats';
 
 function renderInsights(){
@@ -7644,7 +7772,7 @@ function saveToLocalStorage(){
   try{
     localStorage.setItem(LS_KEY, JSON.stringify({
       BOOKS, MEMBERS, SHELVES, BOOKCASES,
-      GAMIFICATION, RECOMMENDATIONS, FAVOURITE_AUTHORS,
+      GAMIFICATION, RECOMMENDATIONS, FAVOURITE_AUTHORS, CUSTOM_GENRES,
       _savedAt: new Date().toISOString()
     }));
   }catch(e){ console.warn('localStorage save failed:', e); }
