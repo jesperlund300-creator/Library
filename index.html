@@ -1073,7 +1073,7 @@ textarea{resize:vertical;min-height:88px;width:100%}
 .btn-lookup{padding:9px 18px;background:var(--gold);border:none;border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;color:#0f0c08;font-weight:500;cursor:pointer;white-space:nowrap;min-height:40px;transition:opacity .12s}
 .btn-lookup:hover{opacity:.85}
 
-.scan-sheet{background:var(--surface);border:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;padding:24px;width:100%;max-width:540px;animation:slideUp .2s ease}
+.scan-sheet{background:var(--surface);border:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;padding:24px;width:100%;max-width:540px;animation:slideUp .2s ease;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .scan-sheet h3{font-family:'Fraunces',serif;font-size:20px;font-weight:400;margin-bottom:6px;color:var(--gold)}
 .scan-sheet .sub{font-size:13px;color:var(--muted);margin-bottom:20px}
 .scan-tabs{display:flex;gap:6px;margin-bottom:18px}
@@ -7486,7 +7486,19 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
   if(!found){
     if(!fromCamera){
       showLookupSearching(target,false);
-      showLookupErr(target,'Book not found. Try searching by title instead.');
+      // Offer to add manually with the ISBN pre-filled
+      const errEl = document.getElementById('scan-err-'+target) || document.getElementById('isbn-err');
+      if(errEl){
+        errEl.style.display='block';
+        errEl.style.color='var(--muted)';
+        errEl.innerHTML=`Book not found in any database. 
+          <button onclick="applyResult({isbn:'${isbn13||originalIsbn}'});closeScan();goTab('add')"
+            style="margin-left:6px;padding:4px 12px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-glow);color:var(--gold);font-size:12px;cursor:pointer">
+            ✎ Add manually
+          </button>`;
+      } else {
+        showLookupErr(target,'Book not found. Try searching by title, or add manually.');
+      }
     }
     return;
   }
@@ -7533,12 +7545,11 @@ function showISBNResult(b, target='isbn'){
   const photoSec = document.getElementById(target+'-photo-section');
   if(photoSec) injectPhotoSlots(photoSec, target);
   resultEl.classList.add('show');
-  // Scroll the scan modal sheet to top so result is visible
+  // Scroll the sheet to show the result
   setTimeout(()=>{
-    const modal = resultEl.closest('.modal');
-    if(modal) modal.scrollTop = 0;
-    else resultEl.scrollIntoView({behavior:'smooth', block:'start'});
-  }, 100);
+    const sheet = document.querySelector('.scan-sheet');
+    if(sheet) sheet.scrollTop = sheet.scrollHeight;
+  }, 150);
 }
 
 function injectPhotoSlots(container, target){
