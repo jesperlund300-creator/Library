@@ -842,8 +842,7 @@ textarea{resize:vertical;min-height:88px;width:100%}
   -webkit-backdrop-filter:blur(10px);
 }
 .col-filter-bar .search{flex:1;min-width:140px}
-@media(max-width:600px){
-  .col-hero{margin:-10px -10px 0;padding:22px 14px 16px}
+@media(hover:none){:root{--edit-btn-display:none}}
   .col-hero-title{font-size:24px}
   .col-filter-bar{padding:8px 10px;margin:0 -10px}
   .col-hero-stat{padding:8px 12px;min-width:60px}
@@ -2750,7 +2749,8 @@ function buildSpine(b){
   editBtn.textContent='✎';
   editBtn.title='Edit book';
   editBtn.addEventListener('click', e=>{e.stopPropagation();forceHideTooltip();openEdit(b.id);});
-  editBtn.addEventListener('touchend', e=>{e.stopPropagation();e.preventDefault();forceHideTooltip();openEdit(b.id);});
+  // Hide edit button on touch devices — use detail modal's edit button instead
+  editBtn.style.cssText += ';display:var(--edit-btn-display,flex)';
 
   // ── Tooltip ──
   const buildTipHTML = () => {
@@ -2770,7 +2770,9 @@ function buildSpine(b){
             </button>
             ${isRead && hasDate ? `<input type="date" class="tt-date-input" data-bid="${b.id}" data-mid="${m.id}"
               value="${readDate}" title="Finished date"
-              style="border-color:${m.color}40;color:${m.color}">` : ''}
+              style="border-color:${m.color}40;color:${m.color}">
+              <button onclick="event.stopPropagation();saveReadDate('${b.id}','${m.id}','');forceShowTooltip('${b.id}')" title="Set date to unknown"
+                style="background:none;border:none;color:var(--faint);font-size:13px;cursor:pointer;padding:0 4px;line-height:1" title="Clear date">✕</button>` : ''}
             ${isRead && !hasDate ? `<span style="font-size:10px;color:var(--faint);margin-left:4px">Date unknown
               <button onclick="event.stopPropagation();document.getElementById('date-picker-${b.id}-${m.id}').style.display='inline';this.parentElement.style.display='none'"
                 style="background:none;border:none;color:${m.color};font-size:10px;cursor:pointer;padding:0 2px">Set date</button>
@@ -2869,9 +2871,9 @@ function buildSpine(b){
   });
   wrap.addEventListener('touchend', e=>{
     e.stopPropagation();
-    const tip=document.getElementById('book-tooltip');
-    if(tip.classList.contains('visible')&&tip._bookId===b.id){forceHideTooltip();}
-    else{tip._bookId=b.id;showBookTooltip(wrap, buildTipHTML(), b.id);}
+    e.preventDefault();
+    // On mobile: tap opens detail view directly — tooltip is desktop-only
+    openDetail(b.id);
   });
 
   wrap.appendChild(spineEl);
@@ -6922,6 +6924,15 @@ function markReadUnknownDate(bookId, memberId){
   markSaved(); renderMemberBooks(); renderMembers();
   const page = document.getElementById('page-collection');
   if(page && page.classList.contains('active')) renderBookcase();
+}
+
+function forceShowTooltip(bookId){
+  // Re-open the tooltip for this book by simulating a click on its spine
+  forceHideTooltip();
+  setTimeout(()=>{
+    const spine = document.querySelector(`[data-id="${bookId}"]`);
+    if(spine) spine.click();
+  }, 50);
 }
 
 function saveReadDate(bookId, memberId, date){
