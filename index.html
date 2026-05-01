@@ -1389,12 +1389,6 @@ textarea{resize:vertical;min-height:88px;width:100%}
           <div class="fg"><label>Genre *</label>
             <select id="n-genre" onchange="populateSubgenreSelect('n-subgenre','n-genre','')">
               <option value="">Select genre</option>
-              <option>Fantasy</option><option>Science fiction</option><option>Mystery</option>
-              <option>Thriller</option><option>Romance</option><option>Horror</option>
-              <option>Historical fiction</option><option>Literary fiction</option>
-              <option>Non-fiction</option><option>Biography</option><option>Self-help</option>
-              <option>Philosophy</option><option>Science</option><option>History</option>
-              <option>Poetry</option><option>Graphic novel</option><option>Other</option>
             </select>
           </div>
           <div class="fg"><label>Year published</label><input type="number" id="n-year" placeholder="2007" min="1000" max="2099" inputmode="numeric"></div>
@@ -1831,12 +1825,7 @@ textarea{resize:vertical;min-height:88px;width:100%}
     <div class="fr">
       <div class="fg"><label>Genre</label>
         <select id="e-genre" onchange="populateSubgenreSelect('e-subgenre','e-genre','')">
-          <option>Fantasy</option><option>Science fiction</option><option>Mystery</option>
-          <option>Thriller</option><option>Romance</option><option>Horror</option>
-          <option>Historical fiction</option><option>Literary fiction</option>
-          <option>Non-fiction</option><option>Biography</option><option>Self-help</option>
-          <option>Philosophy</option><option>Science</option><option>History</option>
-          <option>Poetry</option><option>Graphic novel</option><option>Other</option>
+          <option value="">Select genre</option>
         </select>
       </div>
       <div class="fg"><label>Year</label><input type="number" id="e-year" min="1000" max="2099" inputmode="numeric"></div>
@@ -2157,7 +2146,7 @@ function showPage(page){
   if(page==='members') renderMembers();
   if(page==='reading') renderReading();
   if(page==='insights') renderInsights();
-  if(page==='add') { renderAddTierRows(); refreshSeriesSuggestions(); }
+  if(page==='add') { renderAddTierRows(); refreshSeriesSuggestions(); populateGenreSelect('n-genre'); }
 }
 
 function renderAuthors(){
@@ -3217,6 +3206,7 @@ function openEdit(id){
   const b=BOOKS.find(x=>x.id===id);if(!b) return;
   editId=id;
   refreshSeriesSuggestions();
+  populateGenreSelect('e-genre', b.genre||'');
   document.getElementById('e-title').value=b.title;
   document.getElementById('e-author').value=b.author;
   document.getElementById('e-genre').value=b.genre;
@@ -3925,7 +3915,7 @@ const SUBGENRES = {
 
 // Returns merged built-in + custom genres, sorted alphabetically
 function getAllGenres(){
-  const builtin = getAllGenres();
+  const builtin = Object.keys(SUBGENRES);
   const custom = Object.keys(CUSTOM_GENRES||{});
   return [...new Set([...builtin, ...custom])].sort((a,b)=>a.localeCompare(b));
 }
@@ -3935,6 +3925,15 @@ function getSubgenres(genre){
   const builtin = SUBGENRES[genre]||[];
   const custom = (CUSTOM_GENRES||{})[genre]?.subgenres||[];
   return [...new Set([...builtin.filter(o=>o!=='Other'), ...custom, 'Other'])];
+}
+
+// Populate a genre <select> with all genres
+function populateGenreSelect(selectId, currentValue=''){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  sel.innerHTML = '<option value="">Select genre</option>'
+    + getAllGenres().map(g=>`<option value="${esc(g)}"${g===currentValue?' selected':''}>${esc(g)}</option>`).join('');
+  if(currentValue) sel.value = currentValue;
 }
 
 function populateSubgenreSelect(selectId, genreSelectId, currentValue){
@@ -5506,12 +5505,13 @@ function deleteCustomSubgenre(genre, sub){
 
 function refreshGenreDropdowns(){
   // Refresh all visible genre selects
-  ['f-genre','n-genre','e-genre'].forEach(id=>{
+  const all = getAllGenres();
+  [['f-genre','All genres'],['n-genre','Select genre'],['e-genre','Select genre'],['authors-genre','All genres']].forEach(([id, placeholder])=>{
     const sel = document.getElementById(id);
     if(!sel) return;
     const prev = sel.value;
-    sel.innerHTML = (id==='f-genre'?'<option value="">All genres</option>':'<option value="">Select genre</option>')
-      + getAllGenres().map(g=>`<option value="${esc(g)}"${g===prev?' selected':''}>${esc(g)}</option>`).join('');
+    sel.innerHTML = `<option value="">${placeholder}</option>`
+      + all.map(g=>`<option value="${esc(g)}"${g===prev?' selected':''}>${esc(g)}</option>`).join('');
   });
 }
 
