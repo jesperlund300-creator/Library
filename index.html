@@ -2761,17 +2761,28 @@ function buildSpine(b){
           const isRead = (b.readBy||[]).includes(m.id);
           const readDate = (b.readDates||{})[m.id] || '';
           const startDate = (b.readStartDates||{})[m.id] || '';
+          const hasDate = readDate && readDate.length > 0;
           return `<div class="tt-read-row">
             <button class="tt-read-btn${isRead?' tt-read-on':''}" data-bid="${b.id}" data-mid="${m.id}"
               style="${isRead?'border-color:'+m.color+';color:'+m.color:''}">
               <span class="tt-read-dot" style="background:${isRead?m.color:'var(--faint)'}"></span>
               ${esc(m.name)}
             </button>
-            ${isRead ? `<input type="date" class="tt-date-input" data-bid="${b.id}" data-mid="${m.id}"
+            ${isRead && hasDate ? `<input type="date" class="tt-date-input" data-bid="${b.id}" data-mid="${m.id}"
               value="${readDate}" title="Finished date"
               style="border-color:${m.color}40;color:${m.color}">` : ''}
+            ${isRead && !hasDate ? `<span style="font-size:10px;color:var(--faint);margin-left:4px">Date unknown
+              <button onclick="event.stopPropagation();document.getElementById('date-picker-${b.id}-${m.id}').style.display='inline';this.parentElement.style.display='none'"
+                style="background:none;border:none;color:${m.color};font-size:10px;cursor:pointer;padding:0 2px">Set date</button>
+            </span>
+            <input type="date" id="date-picker-${b.id}-${m.id}" class="tt-date-input" data-bid="${b.id}" data-mid="${m.id}"
+              style="display:none;border-color:${m.color}40;color:${m.color}">` : ''}
+            ${!isRead ? `<button onclick="event.stopPropagation();markReadUnknownDate('${b.id}','${m.id}')"
+              style="font-size:10px;color:var(--faint);background:none;border:1px solid var(--border);border-radius:8px;padding:2px 7px;cursor:pointer;white-space:nowrap;margin-left:2px">
+              ? Unknown date</button>` : ''}
           </div>
-          ${isRead && !startDate ? '' : !isRead ? `<div style="display:flex;align-items:center;gap:4px;margin-left:8px;margin-bottom:2px">
+          ${isRead && startDate ? `<div style="font-size:10px;color:var(--faint);margin-left:8px;margin-bottom:2px">Started: ${startDate}</div>` : ''}
+          ${!isRead ? `<div style="display:flex;align-items:center;gap:4px;margin-left:8px;margin-bottom:2px">
             <span style="font-size:10px;color:var(--faint)">Started:</span>
             <input type="date" value="${startDate}" title="Start date"
               onchange="saveStartDate('${b.id}','${m.id}',this.value)"
@@ -6890,16 +6901,25 @@ function toggleReadWithDate(bookId, memberId){
   const idx = b.readBy.indexOf(memberId);
   if(idx>=0){
     b.readBy.splice(idx,1);
-    // Keep the date in case they re-check it
   } else {
     b.readBy.push(memberId);
-    // Default to today
-    if(!b.readDates) b.readDates={};
-    if(!b.readDates[memberId]) b.readDates[memberId] = new Date().toISOString().slice(0,10);
+    // Don't auto-set date — let user choose or leave unknown
   }
   markSaved();
   renderMemberBooks();
   renderMembers();
+  const page = document.getElementById('page-collection');
+  if(page && page.classList.contains('active')) renderBookcase();
+}
+
+function markReadUnknownDate(bookId, memberId){
+  const b = BOOKS.find(x=>x.id===bookId); if(!b) return;
+  if(!b.readBy) b.readBy=[];
+  if(!b.readBy.includes(memberId)) b.readBy.push(memberId);
+  // Explicitly set date to empty string = unknown
+  if(!b.readDates) b.readDates={};
+  b.readDates[memberId] = '';
+  markSaved(); renderMemberBooks(); renderMembers();
   const page = document.getElementById('page-collection');
   if(page && page.classList.contains('active')) renderBookcase();
 }
