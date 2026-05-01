@@ -7414,23 +7414,28 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
   isbn=isbn.replace(/[^0-9X]/gi,'').toUpperCase();
   if(!isbn){showLookupErr(target,'Please enter a valid ISBN.');return;}
 
-  // Convert ISBN-10 to ISBN-13
+  // Keep original for direct lookup
+  const originalIsbn = isbn;
+
+  // Convert ISBN-10 to ISBN-13 for better database coverage
+  let isbn13 = isbn;
   if(isbn.length===10){
-    const isbn13base='978'+isbn.slice(0,9);
-    const check=(10-isbn13base.split('').reduce((s,d,i)=>s+(i%2===0?parseInt(d):parseInt(d)*3),0)%10)%10;
-    isbn='978'+isbn.slice(0,9)+check;
+    const base='978'+isbn.slice(0,9);
+    const check=(10-base.split('').reduce((s,d,i)=>s+(i%2===0?parseInt(d):parseInt(d)*3),0)%10)%10;
+    isbn13='978'+isbn.slice(0,9)+check;
   }
 
-  // Validate ISBN-13 checksum
+  // Only validate ISBN-13 checksum (skip for ISBN-10 — older books have irregular check digits)
   if(isbn.length===13){
     const digits=isbn.split('').map(Number);
     const check=(10-digits.slice(0,12).reduce((s,d,i)=>s+(i%2===0?d:d*3),0)%10)%10;
     if(check!==digits[12]){
-      showLookupErr(target,`ISBN checksum invalid — scanner may have misread a digit. Got: ${isbn}`);
+      showLookupErr(target,`ISBN checksum invalid — scanner may have misread. Got: ${isbn}`);
       return;
     }
+    isbn13 = isbn;
   } else if(isbn.length!==10){
-    showLookupErr(target,`ISBN must be 10 or 13 digits. Got ${isbn.length} digits.`);
+    showLookupErr(target,`ISBN must be 10 or 13 digits. Got ${isbn.length}.`);
     return;
   }
 
@@ -7439,50 +7444,42 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
   let title='', author='', year='', genre='', subgenre='', coverId=null, pages=null, series, seriesNum;
   let found = false;
 
-  // Run Google Books and Open Library in parallel
-  const [gbResult, olResult] = await Promise.allSettled([
-    fetch(`https://www.googleapis.com/books/v1/volumes?key=AIzaSyAclk0_KdNJmjcb92YUZDILs8eMy9mxXmk&q=isbn:${isbn}&fields=items(volumeInfo(title,authors,publishedDate,categories,imageLinks,pageCount,seriesInfo))`)
-      .then(r=>r.json()),
-    fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`)
-      .then(r=>r.json())
-  ]);
+  // Try both original and converted ISBN for maximum coverage
+  const isbnsToTry = [...new Set([isbn13, originalIsbn])];
 
-  // Apply Google Books data
-  if(gbResult.status==='fulfilled'){
-    const vi = gbResult.value?.items?.[0]?.volumeInfo;
-    if(vi){
-      title = vi.title||'';
-      author = (vi.authors||[]).join(', ');
-      year = vi.publishedDate?.slice(0,4)||'';
-      pages = vi.pageCount||null;
-      const subjects = vi.categories||[];
-      const g = guessGenreAndSubgenre(subjects);
-      genre = g.genre; subgenre = g.subgenre;
-      const si = vi.seriesInfo;
-      if(si){
-        series = si.shortSeriesBookTitle||undefined;
-        seriesNum = si.volumeSeries?.[0]?.orderNumber!=null ? parseFloat(si.volumeSeries[0].orderNumber) : undefined;
+  for(const tryIsbn of isbnsToTry){
+    if(found) break;
+
+    const [gbResult, olResult] = await Promise.allSettled([
+      fetch(`https://www.googleapis.com/books/v1/volumes?key=AIzaSyAclk0_KdNJmjcb92YUZDILs8eMy9mxXmk&q=isbn:${tryIsbn}&fields=items(volumeInfo(title,authors,publishedDate,categories,imageLinks,pageCount,seriesInfo))`)
+        .then(r=>r.json()),
+      fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${tryIsbn}&format=json&jscmd=data`)
+        .then(r=>r.json())
+    ]);
+
+    if(gbResult.status==='fulfilled'){
+      const vi=gbResult.value?.items?.[0]?.volumeInfo;
+      if(vi){
+        title=vi.title||''; author=(vi.authors||[]).join(', ');
+        year=vi.publishedDate?.slice(0,4)||''; pages=vi.pageCount||null;
+        const g=guessGenreAndSubgenre(vi.categories||[]);
+        genre=g.genre; subgenre=g.subgenre;
+        const si=vi.seriesInfo;
+        if(si){ series=si.shortSeriesBookTitle||undefined; seriesNum=si.volumeSeries?.[0]?.orderNumber!=null?parseFloat(si.volumeSeries[0].orderNumber):undefined; }
+        found=true;
       }
-      found = true;
     }
-  }
-
-  // Apply Open Library data (fills gaps or overrides if GB failed)
-  if(olResult.status==='fulfilled'){
-    const key=`ISBN:${isbn}`;
-    const book = olResult.value?.[key];
-    if(book){
-      if(!title) title = book.title||'';
-      if(!author) author = (book.authors||[]).map(a=>a.name).join(', ');
-      if(!year && book.publish_date) year = book.publish_date.match(/\d{4}/)?.[0]||'';
-      if(!pages) pages = book.number_of_pages||null;
-      coverId = (book.covers||[])[0]||null;
-      if(!genre){
-        const subjects = (book.subjects||[]).map(s=>typeof s==='string'?s:(s.name||''));
-        const g = guessGenreAndSubgenre(subjects);
-        genre = g.genre; subgenre = g.subgenre;
+    if(olResult.status==='fulfilled'){
+      const book=olResult.value?.[`ISBN:${tryIsbn}`];
+      if(book){
+        if(!title) title=book.title||'';
+        if(!author) author=(book.authors||[]).map(a=>a.name).join(', ');
+        if(!year&&book.publish_date) year=book.publish_date.match(/\d{4}/)?.[0]||'';
+        if(!pages) pages=book.number_of_pages||null;
+        coverId=(book.covers||[])[0]||null;
+        if(!genre){ const g=guessGenreAndSubgenre((book.subjects||[]).map(s=>typeof s==='string'?s:(s.name||''))); genre=g.genre; subgenre=g.subgenre; }
+        found=true;
       }
-      found = true;
     }
   }
 
@@ -7494,9 +7491,8 @@ async function fetchByISBN(isbn, fromCamera=false, target='isbn'){
     return;
   }
 
-  pendingResult={...pendingResult, title, author, year, genre, subgenre, isbn, coverId,
+  pendingResult={...pendingResult, title, author, year, genre, subgenre, isbn:isbn13||originalIsbn, coverId,
     pages:pages||undefined, series, seriesNum};
-
   if(!fromCamera){
     showLookupSearching(target,false);
     showISBNResult(pendingResult, target);
@@ -7537,8 +7533,12 @@ function showISBNResult(b, target='isbn'){
   const photoSec = document.getElementById(target+'-photo-section');
   if(photoSec) injectPhotoSlots(photoSec, target);
   resultEl.classList.add('show');
-  // Scroll result into view on mobile
-  setTimeout(()=>resultEl.scrollIntoView({behavior:'smooth', block:'nearest'}), 100);
+  // Scroll the scan modal sheet to top so result is visible
+  setTimeout(()=>{
+    const modal = resultEl.closest('.modal');
+    if(modal) modal.scrollTop = 0;
+    else resultEl.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 100);
 }
 
 function injectPhotoSlots(container, target){
