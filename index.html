@@ -1390,7 +1390,8 @@ textarea{resize:vertical;min-height:88px;width:100%}
               <option value="">Select genre</option>
             </select>
           </div>
-          <div class="fg"><label>Year published</label><input type="number" id="n-year" placeholder="2007" min="1000" max="2099" inputmode="numeric"></div>
+          <div class="fg"><label>Original published</label><input type="number" id="n-year" placeholder="e.g. 1954" min="1000" max="2099" inputmode="numeric"></div>
+          <div class="fg"><label>Edition published</label><input type="number" id="n-edition-year" placeholder="e.g. 2023" min="1000" max="2099" inputmode="numeric"></div>
           <div class="fg" style="max-width:110px"><label>Pages</label><input type="number" id="n-pages" placeholder="320" min="1" max="5000" inputmode="numeric"></div>
         </div>
         <div class="fr">
@@ -1827,7 +1828,8 @@ textarea{resize:vertical;min-height:88px;width:100%}
           <option value="">Select genre</option>
         </select>
       </div>
-      <div class="fg"><label>Year</label><input type="number" id="e-year" min="1000" max="2099" inputmode="numeric"></div>
+      <div class="fg"><label>Original published</label><input type="number" id="e-year" min="1000" max="2099" inputmode="numeric" placeholder="e.g. 1954"></div>
+      <div class="fg"><label>Edition published</label><input type="number" id="e-edition-year" min="1000" max="2099" inputmode="numeric" placeholder="e.g. 2023"></div>
       <div class="fg" style="max-width:110px"><label>Pages</label><input type="number" id="e-pages" placeholder="320" min="1" max="5000" inputmode="numeric"></div>
     </div>
     <div class="fr">
@@ -2225,7 +2227,7 @@ function renderAuthors(){
             : `<div class="author-book-cover-fb" style="background:${bookPalette(b).spine}"></div>`}
           <div class="author-book-info">
             <div class="author-book-title">${esc(b.title)}</div>
-            <div class="author-book-meta">${[b.year,b.genre,b.subgenre].filter(Boolean).join(' · ')}</div>
+            <div class="author-book-meta">${[b.year?(b.editionYear&&b.editionYear!==b.year?`${b.year} (ed. ${b.editionYear})`:b.year):b.editionYear||'',b.genre,b.subgenre].filter(Boolean).join(' · ')}</div>
           </div>
           ${btm
             ? `<div class="author-book-tier" style="background:${btm.bg};color:${btm.color}">${b.tier}</div>`
@@ -2819,7 +2821,7 @@ function buildSpine(b){
 
     return `
       <strong>${esc(b.title)}</strong>
-      <em>${b.author?'by '+esc(b.author):''}${b.year?' · '+b.year:''}</em>
+      <em>${b.author?'by '+esc(b.author):''}${b.year?' · '+b.year+(b.editionYear&&b.editionYear!==b.year?' (ed. '+b.editionYear+')':''):b.editionYear?' · ed. '+b.editionYear:''}</em>
       <div class="tt-meta">
         ${b.genre?`<span class="tt-pill">${esc(b.genre)}</span>`:''}
         ${b.subgenre?`<span class="tt-pill" style="color:var(--muted)">${esc(b.subgenre)}</span>`:''}
@@ -3179,6 +3181,7 @@ function addBook(){
   const author=document.getElementById('n-author').value.trim();
   const genre=document.getElementById('n-genre').value;
   const year=document.getElementById('n-year').value;
+  const editionYear=document.getElementById('n-edition-year').value;
   const pagesRaw=document.getElementById('n-pages').value;
   const pages=pagesRaw?parseInt(pagesRaw):undefined;
   const notes=document.getElementById('n-notes').value.trim();
@@ -3197,7 +3200,7 @@ function addBook(){
   if(!title||!author||!genre){fb.className='feedback fberr';fb.textContent='Please fill in title, author and genre.';return;}
   const memberTiers = {...addMemberTiers};
   const firstTier = MEMBERS.length ? (memberTiers[MEMBERS[0].id]||'') : addT;
-  const book={id:uid(),title,author,genre,year:year||'',notes,subgenre:subgenre||undefined,language:language||undefined,series:series||undefined,seriesNum,seriesTotal,pages,tier:firstTier,memberTiers,added:Date.now()};
+  const book={id:uid(),title,author,genre,year:year||'',editionYear:editionYear||undefined,notes,subgenre:subgenre||undefined,language:language||undefined,series:series||undefined,seriesNum,seriesTotal,pages,tier:firstTier,memberTiers,added:Date.now()};
   if(coverId) book.coverId=coverId;
   if(isbn) book.isbn=isbn;
   if(spinePhoto) book.spinePhoto=spinePhoto;
@@ -3209,7 +3212,7 @@ function addBook(){
 }
 function clearAdd(){
   const titleEl=document.getElementById('n-title');
-  ['n-title','n-author','n-year','n-pages','n-notes','n-language','n-series','n-seriesnum','n-seriestotal'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['n-title','n-author','n-year','n-edition-year','n-pages','n-notes','n-language','n-series','n-seriesnum','n-seriestotal'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('n-subgenre').innerHTML='<option value="">— Select sub-genre —</option>';
   const nsc=document.getElementById('n-subgenre-custom'); if(nsc){nsc.value='';nsc.style.display='none';}
   titleEl.dataset.coverId=''; titleEl.dataset.isbn='';
@@ -3227,6 +3230,8 @@ function openEdit(id){
   document.getElementById('e-author').value=b.author;
   document.getElementById('e-genre').value=b.genre;
   document.getElementById('e-year').value=b.year||'';
+  const edYrEl=document.getElementById('e-edition-year');
+  if(edYrEl) edYrEl.value=b.editionYear||'';
   document.getElementById('e-pages').value=b.pages||'';
   document.getElementById('e-subgenre').value=b.subgenre||'';
   document.getElementById('e-language').value=b.language||'';
@@ -3271,6 +3276,7 @@ function saveEdit(){
   b.author=document.getElementById('e-author').value.trim()||b.author;
   b.genre=document.getElementById('e-genre').value;
   b.year=document.getElementById('e-year').value;
+  b.editionYear=document.getElementById('e-edition-year')?.value||undefined;
   const epages=document.getElementById('e-pages').value;
   b.pages=epages?parseInt(epages):undefined;
   b.subgenre=getSubgenreValue('e-subgenre','e-subgenre-custom')||undefined;
@@ -4734,7 +4740,7 @@ async function findNextInSeries(seriesName, nextNum, author){
               ${coverSrc ? `<img src="${coverSrc}" style="width:32px;height:46px;object-fit:cover;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'" alt="">` : ''}
               <div style="flex:1;min-width:0">
                 <div style="font-size:13px;color:var(--text);font-family:'Fraunces',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.title)}</div>
-                <div style="font-size:11px;color:var(--faint)">${esc(b.author)}${b.year?' · '+b.year:''}${b.pages?' · '+b.pages+'p':''}</div>
+                <div style="font-size:11px;color:var(--faint)">${esc(b.author)}${b.year?' · '+b.year+(b.editionYear&&b.editionYear!==b.year?' (ed. '+b.editionYear+')':''):''}${b.pages?' · '+b.pages+'p':''}</div>
               </div>
             </div>`;
           }).join('');
