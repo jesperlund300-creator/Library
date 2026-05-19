@@ -4840,6 +4840,42 @@ const BADGE_START = new Date(new Date().getFullYear(),0,1).toISOString().slice(0
 function getBadgeLevels(mid){ return gData(mid).badgeLevels||{}; }
 function getBadgeLevel(mid,id){ return getBadgeLevels(mid)[id]?.level||null; }
 const TIER_ORDER = ['bronze','silver','gold','platinum'];
+const TIER_COLORS = {bronze:'#cd7f32', silver:'#a8a9ad', gold:'var(--gold)', platinum:'#e5e4e2'};
+const TIER_GLOWS  = {bronze:'rgba(205,127,50,.2)', silver:'rgba(168,169,173,.15)', gold:'var(--gold-glow)', platinum:'rgba(229,228,226,.15)'};
+
+const TIERED_BADGES = [
+  { id:'reader', icon:'📚', name:'Reader',
+    tiers:[{level:'bronze',label:'Bookworm',threshold:5,desc:'Read 5 books'},{level:'silver',label:'Page Turner',threshold:15,desc:'Read 15 books'},{level:'gold',label:'Avid Reader',threshold:30,desc:'Read 30 books'},{level:'platinum',label:'Bibliophile',threshold:75,desc:'Read 75 books'}],
+    getValue:(mid)=>BOOKS.filter(b=>(b.readBy||[]).includes(mid)&&(b.readDates||{})[mid]>=BADGE_START).length},
+  { id:'critic', icon:'⭐', name:'Critic',
+    tiers:[{level:'bronze',label:'Gold Standard',threshold:1,desc:'Give 1 S tier rating'},{level:'silver',label:'Discerning',threshold:5,desc:'Give 5 S tier ratings'},{level:'gold',label:'Connoisseur',threshold:10,desc:'Give 10 S tier ratings'},{level:'platinum',label:'High Standards',threshold:20,desc:'Give 20 S tier ratings'}],
+    getValue:(mid)=>BOOKS.filter(b=>(b.readBy||[]).includes(mid)&&(b.readDates||{})[mid]>=BADGE_START&&((b.memberTiers||{})[mid]==='S'||b.tier==='S')).length},
+  { id:'explorer', icon:'🌈', name:'Explorer',
+    tiers:[{level:'bronze',label:'Curious',threshold:3,desc:'Read 3 different genres'},{level:'silver',label:'Eclectic',threshold:5,desc:'Read 5 different genres'},{level:'gold',label:'Genre Hopper',threshold:8,desc:'Read 8 different genres'},{level:'platinum',label:'Omnivore',threshold:12,desc:'Read 12 different genres'}],
+    getValue:(mid)=>new Set(BOOKS.filter(b=>(b.readBy||[]).includes(mid)&&(b.readDates||{})[mid]>=BADGE_START).map(b=>b.genre).filter(Boolean)).size},
+  { id:'linguist', icon:'🌍', name:'Linguist',
+    tiers:[{level:'bronze',label:'Bilingual',threshold:2,desc:'Read in 2 languages'},{level:'silver',label:'Trilingual',threshold:3,desc:'Read in 3 languages'},{level:'gold',label:'Polyglot',threshold:4,desc:'Read in 4 languages'},{level:'platinum',label:'World Reader',threshold:5,desc:'Read in 5+ languages'}],
+    getValue:(mid)=>new Set(BOOKS.filter(b=>(b.readBy||[]).includes(mid)&&(b.readDates||{})[mid]>=BADGE_START).map(b=>b.language).filter(Boolean)).size},
+  { id:'marathoner', icon:'🐋', name:'Marathoner',
+    tiers:[{level:'bronze',label:'Endurance',threshold:300,desc:'Read a book over 300p'},{level:'silver',label:'Long Haul',threshold:500,desc:'Read a book over 500p'},{level:'gold',label:'Epic Reader',threshold:700,desc:'Read a book over 700p'},{level:'platinum',label:'Moby Reader',threshold:1000,desc:'Read a book over 1000p'}],
+    getValue:(mid)=>Math.max(0,...BOOKS.filter(b=>(b.readBy||[]).includes(mid)&&(b.readDates||{})[mid]>=BADGE_START&&b.pages>0).map(b=>b.pages))},
+  { id:'collector', icon:'🎖️', name:'Collector',
+    tiers:[{level:'bronze',label:'Starter',threshold:1,desc:'Complete 1 series'},{level:'silver',label:'Dedicated',threshold:3,desc:'Complete 3 series'},{level:'gold',label:'Series Hunter',threshold:5,desc:'Complete 5 series'},{level:'platinum',label:'Completionist',threshold:10,desc:'Complete 10 series'}],
+    getValue:(mid)=>{ const sm={}; BOOKS.forEach(b=>{ if(b.series&&b.seriesTotal>1){ if(!sm[b.series]) sm[b.series]={total:b.seriesTotal,read:0}; if((b.readBy||[]).includes(mid)&&(b.readDates||{})[mid]>=BADGE_START) sm[b.series].read++; }}); return Object.values(sm).filter(s=>s.read>=s.total).length; }},
+  { id:'social', icon:'🤝', name:'Social',
+    tiers:[{level:'bronze',label:'Book Club',threshold:1,desc:'1 book read by others too'},{level:'silver',label:'Shared Shelf',threshold:5,desc:'5 books shared'},{level:'gold',label:'Community',threshold:10,desc:'10 books shared'},{level:'platinum',label:'Connector',threshold:20,desc:'20 books shared'}],
+    getValue:(mid)=>{ const others=MEMBERS.filter(x=>x.id!==mid); return BOOKS.filter(b=>(b.readBy||[]).includes(mid)&&(b.readDates||{})[mid]>=BADGE_START&&others.some(o=>(b.readBy||[]).includes(o.id))).length; }},
+];
+
+const YEARLY_BADGE_DEFS = [
+  {id:'y_streak_3',   icon:'🔥', name:'On Fire',        desc:'3-month reading streak this year'},
+  {id:'y_streak_6',   icon:'🌊', name:'Unstoppable',    desc:'6-month streak this year'},
+  {id:'y_year_12',    icon:'📅', name:'A Book a Month', desc:'1 book every month this year'},
+  {id:'y_genres_3',   icon:'🎭', name:'Eclectic',       desc:'Read 3+ genres this year'},
+  {id:'y_goal',       icon:'🎯', name:'Goal Getter',    desc:'Hit your yearly reading goal'},
+  {id:'y_pages_2000', icon:'📄', name:'Page Crusher',   desc:'Read 2000+ pages this year'},
+  {id:'y_bingo',      icon:'🎲', name:'Bingo!',         desc:'Completed a bingo line this year'},
+];
 function awardBadgeTier(mid, id, level){
   if(!gData(mid).badgeLevels) gData(mid).badgeLevels={};
   const cur = gData(mid).badgeLevels[id];
