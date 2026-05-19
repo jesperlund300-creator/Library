@@ -6718,66 +6718,71 @@ function openDetail(id){
   const detailBtns = document.getElementById('detail-btns');
   let readHtml = '';
   if(MEMBERS.length){
-    readHtml = `<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--faint);margin-bottom:10px">Read by</div>
+    readHtml = `<div style="margin-bottom:16px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--faint);margin-bottom:10px">Reading log</div>
       ${MEMBERS.map(m=>{
-        const isRead = (b.readBy||[]).includes(m.id);
-        const readDate = (b.readDates||{})[m.id]||'';
-        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <button onclick="toggleRead('${b.id}','${m.id}');openDetail('${b.id}')"
-            style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;border:1px solid ${isRead?m.color:'var(--border)'};background:${isRead?m.color+'22':'transparent'};color:${isRead?m.color:'var(--muted)'};font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">
-            <span style="width:8px;height:8px;border-radius:50%;background:${isRead?m.color:'var(--faint)'}"></span>
-            ${esc(m.name)}
-          </button>
-          ${isRead?`<input type="date" value="${readDate}"
-            onchange="saveReadDate('${b.id}','${m.id}',this.value)"
-            style="border:1px solid ${m.color}40;border-radius:var(--r);background:var(--surface2);color:${m.color};padding:4px 8px;font-size:12px;font-family:'DM Sans',sans-serif;color-scheme:dark">`:
-            `<span style="font-size:12px;color:var(--faint)">Not read yet</span>`}
+        const isRead=(b.readBy||[]).includes(m.id);
+        const readDate=(b.readDates||{})[m.id]||'';
+        const startDate=(b.readStartDates||{})[m.id]||'';
+        const hasEndDate=readDate&&readDate.length>0;
+        const isFav=!!(b.allTimeFav||[]).includes(m.id);
+        const isReread=!!(b.wouldReread||{})[m.id];
+        let speed='';
+        if(startDate&&hasEndDate){
+          const days=Math.round((new Date(readDate)-new Date(startDate))/86400000);
+          if(days>0) speed=days+' day'+(days!==1?'s':'');
+          else if(days===0) speed='Same day';
+        }
+        return `<div style="border:1px solid ${isRead?m.color+'55':'var(--border)'};border-radius:var(--rl);padding:14px;margin-bottom:10px;background:${isRead?m.color+'0a':'var(--surface)'}">
+          <!-- Member header + read toggle -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${isRead?'12px':'0'}">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="width:10px;height:10px;border-radius:50%;background:${m.color};display:inline-block;flex-shrink:0"></span>
+              <span style="font-size:14px;font-weight:500;color:var(--text)">${esc(m.name)}</span>
+              ${speed?`<span style="font-size:11px;color:var(--gold)">· ${speed}</span>`:''}
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              ${isRead?`<button onclick="markReadUnknownDate('${b.id}','${m.id}');openDetail('${b.id}')" title="Set date unknown"
+                style="background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;padding:3px 8px;cursor:pointer">? Unknown date</button>`:''}
+              <button onclick="toggleRead('${b.id}','${m.id}');openDetail('${b.id}')"
+                style="padding:5px 14px;border-radius:20px;border:1px solid ${isRead?m.color:'var(--border)'};background:${isRead?m.color+'22':'transparent'};color:${isRead?m.color:'var(--muted)'};font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">
+                ${isRead?'✓ Read':'Mark as read'}</button>
+            </div>
+          </div>
+
+          ${isRead?`<!-- Date fields -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <div>
+              <div style="font-size:10px;color:var(--faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:.6px">Started</div>
+              <input type="date" value="${startDate}"
+                onchange="saveStartDate('${b.id}','${m.id}',this.value)"
+                style="width:100%;border:1px solid ${m.color}44;border-radius:var(--r);background:var(--surface2);color:${startDate?m.color:'var(--muted)'};padding:6px 8px;font-size:12px;font-family:'DM Sans',sans-serif;color-scheme:dark;box-sizing:border-box">
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:.6px">Finished ${hasEndDate?'':'(unknown)'}</div>
+              <input type="date" value="${readDate}"
+                onchange="saveReadDate('${b.id}','${m.id}',this.value)"
+                style="width:100%;border:1px solid ${hasEndDate?m.color+'44':'var(--border)'};border-radius:var(--r);background:var(--surface2);color:${hasEndDate?m.color:'var(--muted)'};padding:6px 8px;font-size:12px;font-family:'DM Sans',sans-serif;color-scheme:dark;box-sizing:border-box">
+            </div>
+          </div>
+          <!-- All-time fav + re-read -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button onclick="toggleAllTimeFav('${m.id}','${b.id}');openDetail('${b.id}')"
+              style="padding:4px 12px;border-radius:12px;border:1px solid ${isFav?'var(--gold)':'var(--border)'};background:${isFav?'var(--gold-glow)':'transparent'};color:${isFav?'var(--gold)':'var(--muted)'};font-size:11px;cursor:pointer">
+              ⭐ All-time fav${isFav?' ✓':''}</button>
+            <button onclick="toggleWouldReread('${m.id}','${b.id}');openDetail('${b.id}')"
+              style="padding:4px 12px;border-radius:12px;border:1px solid ${isReread?'var(--gold)':'var(--border)'};background:${isReread?'var(--gold-glow)':'transparent'};color:${isReread?'var(--gold)':'var(--muted)'};font-size:11px;cursor:pointer">
+              🔄 Would re-read${isReread?' ✓':''}</button>
+          </div>`:''}
         </div>`;
       }).join('')}
     </div>`;
   }
   if(detailBtns) detailBtns.insertAdjacentHTML('beforebegin', readHtml);
 
-  // All-time fav + would re-read buttons
+  // Reading speed is now shown inline in the reading log cards
   const readInfoEl = document.getElementById('detail-read-info');
-  if(readInfoEl && MEMBERS.length){
-    const speedRows = MEMBERS.filter(m=>(b.readBy||[]).includes(m.id)).map(m=>{
-      const start=(b.readStartDates||{})[m.id];
-      const end=(b.readDates||{})[m.id];
-      if(!start&&!end) return '';
-      let speed='';
-      if(start&&end){
-        const days=Math.round((new Date(end)-new Date(start))/86400000);
-        speed=days>0?`${days} day${days!==1?'s':''}`:'Same day';
-      }
-      return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:4px">
-        <span style="color:${m.color};font-weight:500">${esc(m.name)}</span>
-        ${start?`<span style="color:var(--muted)">Started ${start}</span>`:''}
-        ${speed?`<span style="color:var(--gold)">· ${speed} to read</span>`:''}
-      </div>`;
-    }).join('');
-
-    // All-time fav + re-read buttons per member
-    const ratingRows = MEMBERS.filter(m=>(b.readBy||[]).includes(m.id)).map(m=>{
-      const isFav=!!(b.allTimeFav||[]).includes(m.id);
-      const isReread=!!(b.wouldReread||{})[m.id];
-      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="font-size:12px;color:${m.color};font-weight:500;min-width:60px">${esc(m.name)}</span>
-        <button onclick="toggleAllTimeFav('${m.id}','${b.id}');openDetail('${b.id}')"
-          style="padding:5px 12px;border-radius:12px;border:1px solid ${isFav?'var(--gold)':'var(--border)'};background:${isFav?'var(--gold-glow)':'transparent'};color:${isFav?'var(--gold)':'var(--muted)'};font-size:11px;cursor:pointer">
-          ⭐ All-time fav${isFav?' ✓':''}</button>
-        <button onclick="toggleWouldReread('${m.id}','${b.id}');openDetail('${b.id}')"
-          style="padding:5px 12px;border-radius:12px;border:1px solid ${isReread?'var(--gold)':'var(--border)'};background:${isReread?'var(--gold-glow)':'transparent'};color:${isReread?'var(--gold)':'var(--muted)'};font-size:11px;cursor:pointer">
-          🔄 Would re-read${isReread?' ✓':''}</button>
-      </div>`;
-    }).join('');
-
-    if(speedRows||ratingRows) readInfoEl.innerHTML=`<div style="padding:10px 0;border-bottom:1px solid var(--border)">
-      ${speedRows?`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--faint);margin-bottom:8px">Reading speed</div>${speedRows}`:''}
-      ${ratingRows?`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--faint);margin:${speedRows?'12px':'0'} 0 8px">Rating</div>${ratingRows}`:''}
-    </div>`;
-  }
+  if(readInfoEl) readInfoEl.style.display='none';
 
   // Reading log / diary
   const logEl = document.getElementById('detail-reading-log');
