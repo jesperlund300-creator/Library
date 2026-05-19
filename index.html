@@ -1799,7 +1799,8 @@ textarea{resize:vertical;min-height:88px;width:100%}
         <div id="detail-read-info" style="margin-bottom:12px"></div>
         <div id="detail-reading-log" style="margin-bottom:12px"></div>
         <div id="detail-recommend" style="margin-bottom:12px"></div>
-        <div class="detail-btns">
+        <div id="detail-read-section" style="margin-bottom:12px"></div>
+        <div class="detail-btns" id="detail-btns">
           <button class="btn-primary" id="detail-edit-btn">✎ Edit book</button>
           <button class="btn-ghost" onclick="closeDetail()">Close</button>
         </div>
@@ -6797,7 +6798,9 @@ function openDetail(id){
       }).join('')}
     </div>`;
   }
-  if(detailBtns) detailBtns.insertAdjacentHTML('beforebegin', readHtml);
+  const readSectionEl = document.getElementById('detail-read-section');
+  if(readSectionEl) readSectionEl.innerHTML = readHtml;
+  if(detailBtns) detailBtns.insertAdjacentHTML('beforebegin', '');
 
   // Reading speed is now shown inline in the reading log cards
   const readInfoEl = document.getElementById('detail-read-info');
