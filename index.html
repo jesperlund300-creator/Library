@@ -5226,6 +5226,7 @@ function renderTierChallengesSection(m){
 }
 
 
+function getVote(mid,year){ return (gData(mid).votes||{})[year]; }
 function setVote(mid,year,bookId){ if(!gData(mid).votes) gData(mid).votes={}; gData(mid).votes[year]=bookId; markSaved(); renderGame(); }
 
 // ── ALL-TIME FAVOURITE ───────────────────────────────────────
