@@ -4792,43 +4792,50 @@ function isFavAuthor(author, memberId){
 let _gameMemberId = null;
 
 function renderGame(){
-  if(!document.getElementById('game-content')) return;
+  const gameEl = document.getElementById('game-content');
+  if(!gameEl){ console.warn('renderGame: game-content not found'); return; }
   if(!_gameMemberId && MEMBERS.length) _gameMemberId = MEMBERS[0].id;
 
-  // Member pills
   const pillsEl = document.getElementById('game-member-pills');
   if(pillsEl) pillsEl.innerHTML = MEMBERS.map(m=>`<button class="personal-member-pill${m.id===_gameMemberId?' active':''}"
     style="${m.id===_gameMemberId?'border-color:'+m.color+';color:'+m.color+';background:'+m.color+'22':''}"
     onclick="_gameMemberId='${m.id}';renderGame()">${esc(m.name)}</button>`).join('');
 
-  if(!MEMBERS.length){ document.getElementById('game-content').innerHTML='<div style="color:var(--muted);font-size:13px">Add members first.</div>'; return; }
+  if(!MEMBERS.length){ gameEl.innerHTML='<div style="color:var(--muted);font-size:13px">Add members first.</div>'; return; }
 
   const m = MEMBERS.find(x=>x.id===_gameMemberId);
-  if(!m) return;
+  if(!m){ gameEl.innerHTML='<div style="color:var(--muted)">No member selected.</div>'; return; }
 
-  checkAndAwardBadges(m.id);
+  try{ checkAndAwardBadges(m.id); }catch(e){ console.error('checkAndAwardBadges error:',e); }
 
-  const el = document.getElementById('game-content');
-  el.innerHTML = '';
+  gameEl.innerHTML = '';
 
-  // 1. Personal records
-  el.appendChild(renderRecordsSection(m));
-  // 2. All-time favourites
-  el.appendChild(renderAllTimeFavSection(m));
-  // 3. Badges
-  el.appendChild(renderBadgesSection(m));
-  // 2. Challenges
-  el.appendChild(renderChallengesSection(m));
-  // 3. Leaderboard
-  if(MEMBERS.length >= 2) el.appendChild(renderLeaderboardSection());
-  // 4. Bingo
-  el.appendChild(renderBingoSection(m));
-  // 5. Tier challenges
-  el.appendChild(renderTierChallengesSection(m));
-  // 6. Year vote
-  el.appendChild(renderYearVoteSection(m));
+  const sections = [
+    ['Personal records', ()=>renderRecordsSection(m)],
+    ['All-time favs', ()=>renderAllTimeFavSection(m)],
+    ['Badges', ()=>renderBadgesSection(m)],
+    ['Challenges', ()=>renderChallengesSection(m)],
+    ['Leaderboard', ()=>MEMBERS.length>=2?renderLeaderboardSection():null],
+    ['Bingo', ()=>renderBingoSection(m)],
+    ['Tier challenges', ()=>renderTierChallengesSection(m)],
+    ['Year vote', ()=>renderYearVoteSection(m)],
+  ];
 
-  const gameSubEl = document.getElementById('game-sub'); if(gameSubEl) gameSubEl.textContent = `${m.name}'s reading game`;
+  for(const [name, fn] of sections){
+    try{
+      const el = fn();
+      if(el) gameEl.appendChild(el);
+    }catch(e){
+      console.error('renderGame section "'+name+'" error:', e);
+      const errDiv = document.createElement('div');
+      errDiv.style.cssText='color:var(--muted);font-size:12px;padding:8px;border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px';
+      errDiv.textContent='⚠ '+name+' failed: '+e.message;
+      gameEl.appendChild(errDiv);
+    }
+  }
+
+  const gameSubEl = document.getElementById('game-sub');
+  if(gameSubEl) gameSubEl.textContent = `${m.name}'s reading game`;
 }
 
 // ── GAMIFICATION DATA HELPERS ────────────────────────────────
