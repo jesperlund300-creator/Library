@@ -6719,61 +6719,80 @@ function openDetail(id){
   let readHtml = '';
   if(MEMBERS.length){
     readHtml = `<div style="margin-bottom:16px">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--faint);margin-bottom:10px">Reading log</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--faint);margin-bottom:12px">Have you read this?</div>
       ${MEMBERS.map(m=>{
         const isRead=(b.readBy||[]).includes(m.id);
         const readDate=(b.readDates||{})[m.id]||'';
         const startDate=(b.readStartDates||{})[m.id]||'';
-        const hasEndDate=readDate&&readDate.length>0;
-        const isFav=!!(b.allTimeFav||[]).includes(m.id);
+        const hasDate=readDate&&readDate.length>0;
+        const isFav=(b.allTimeFav||[]).includes(m.id);
         const isReread=!!(b.wouldReread||{})[m.id];
         let speed='';
-        if(startDate&&hasEndDate){
+        if(startDate&&hasDate){
           const days=Math.round((new Date(readDate)-new Date(startDate))/86400000);
           if(days>0) speed=days+' day'+(days!==1?'s':'');
           else if(days===0) speed='Same day';
         }
-        return `<div style="border:1px solid ${isRead?m.color+'55':'var(--border)'};border-radius:var(--rl);padding:14px;margin-bottom:10px;background:${isRead?m.color+'0a':'var(--surface)'}">
-          <!-- Member header + read toggle -->
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${isRead?'12px':'0'}">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="width:10px;height:10px;border-radius:50%;background:${m.color};display:inline-block;flex-shrink:0"></span>
-              <span style="font-size:14px;font-weight:500;color:var(--text)">${esc(m.name)}</span>
-              ${speed?`<span style="font-size:11px;color:var(--gold)">· ${speed}</span>`:''}
-            </div>
-            <div style="display:flex;gap:6px;align-items:center">
-              ${isRead?`<button onclick="markReadUnknownDate('${b.id}','${m.id}');openDetail('${b.id}')" title="Set date unknown"
-                style="background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;padding:3px 8px;cursor:pointer">? Unknown date</button>`:''}
-              <button onclick="toggleRead('${b.id}','${m.id}');openDetail('${b.id}')"
-                style="padding:5px 14px;border-radius:20px;border:1px solid ${isRead?m.color:'var(--border)'};background:${isRead?m.color+'22':'transparent'};color:${isRead?m.color:'var(--muted)'};font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">
-                ${isRead?'✓ Read':'Mark as read'}</button>
-            </div>
+
+        return `<div style="border:2px solid ${isRead?m.color:'var(--border)'};border-radius:var(--rl);padding:16px;margin-bottom:12px;background:${isRead?m.color+'0d':'var(--surface)'}">
+
+          <!-- Big read toggle -->
+          <button onclick="toggleRead('${b.id}','${m.id}');openDetail('${b.id}')"
+            style="width:100%;padding:14px;border-radius:var(--r);border:none;background:${isRead?m.color:'var(--surface2)'};color:${isRead?'#fff':'var(--muted)'};font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:${isRead?'14px':'0'}">
+            <span style="font-size:20px">${isRead?'✓':'○'}</span>
+            <span>${esc(m.name)} — ${isRead?'Read':'Not read'}</span>
+          </button>
+
+          ${isRead?`
+          <!-- When did you read it? -->
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">When did you read it?</div>
+
+          <!-- Quick options -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <button onclick="saveReadDate('${b.id}','${m.id}','${new Date().toISOString().slice(0,10)}');openDetail('${b.id}')"
+              style="padding:8px 14px;border-radius:20px;border:1px solid ${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--border)'};background:${readDate===new Date().toISOString().slice(0,10)?m.color+'22':'var(--surface2)'};color:${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--muted)'};font-size:13px;cursor:pointer">
+              Today</button>
+            <button onclick="saveReadDate('${b.id}','${m.id}','${new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01'}');openDetail('${b.id}')"
+              style="padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;cursor:pointer">
+              This month</button>
+            <button onclick="saveReadDate('${b.id}','${m.id}','');openDetail('${b.id}')"
+              style="padding:8px 14px;border-radius:20px;border:1px solid ${!hasDate?m.color:'var(--border)'};background:${!hasDate?m.color+'22':'var(--surface2)'};color:${!hasDate?m.color:'var(--muted)'};font-size:13px;cursor:pointer">
+              Don't know</button>
           </div>
 
-          ${isRead?`<!-- Date fields -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-            <div>
-              <div style="font-size:10px;color:var(--faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:.6px">Started</div>
-              <input type="date" value="${startDate}"
-                onchange="saveStartDate('${b.id}','${m.id}',this.value)"
-                style="width:100%;border:1px solid ${m.color}44;border-radius:var(--r);background:var(--surface2);color:${startDate?m.color:'var(--muted)'};padding:6px 8px;font-size:12px;font-family:'DM Sans',sans-serif;color-scheme:dark;box-sizing:border-box">
+          <!-- Exact date picker (collapsible) -->
+          <details style="margin-bottom:10px">
+            <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px">
+              <span style="font-size:14px">📅</span>
+              ${hasDate?'Finished: <strong style="color:'+m.color+'">'+readDate+'</strong>':'Set exact date'}
+            </summary>
+            <div style="padding:10px 0 4px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <div style="font-size:11px;color:var(--faint);margin-bottom:4px">Started (optional)</div>
+                <input type="date" value="${startDate}"
+                  onchange="saveStartDate('${b.id}','${m.id}',this.value)"
+                  style="width:100%;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark">
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--faint);margin-bottom:4px">Finished</div>
+                <input type="date" value="${readDate}"
+                  onchange="saveReadDate('${b.id}','${m.id}',this.value)"
+                  style="width:100%;border:1px solid ${hasDate?m.color+'66':'var(--border)'};border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark">
+              </div>
             </div>
-            <div>
-              <div style="font-size:10px;color:var(--faint);margin-bottom:4px;text-transform:uppercase;letter-spacing:.6px">Finished ${hasEndDate?'':'(unknown)'}</div>
-              <input type="date" value="${readDate}"
-                onchange="saveReadDate('${b.id}','${m.id}',this.value)"
-                style="width:100%;border:1px solid ${hasEndDate?m.color+'44':'var(--border)'};border-radius:var(--r);background:var(--surface2);color:${hasEndDate?m.color:'var(--muted)'};padding:6px 8px;font-size:12px;font-family:'DM Sans',sans-serif;color-scheme:dark;box-sizing:border-box">
-            </div>
-          </div>
-          <!-- All-time fav + re-read -->
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${speed?`<div style="font-size:12px;color:var(--gold);padding-top:4px">⚡ Read in ${speed}</div>`:''}
+          </details>
+
+          <!-- Fav + reread -->
+          <div style="display:flex;gap:8px">
             <button onclick="toggleAllTimeFav('${m.id}','${b.id}');openDetail('${b.id}')"
-              style="padding:4px 12px;border-radius:12px;border:1px solid ${isFav?'var(--gold)':'var(--border)'};background:${isFav?'var(--gold-glow)':'transparent'};color:${isFav?'var(--gold)':'var(--muted)'};font-size:11px;cursor:pointer">
-              ⭐ All-time fav${isFav?' ✓':''}</button>
+              style="flex:1;padding:8px;border-radius:var(--r);border:1px solid ${isFav?'var(--gold)':'var(--border)'};background:${isFav?'var(--gold-glow)':'transparent'};color:${isFav?'var(--gold)':'var(--muted)'};font-size:12px;cursor:pointer">
+              ⭐ ${isFav?'All-time fav ✓':'All-time fav'}</button>
             <button onclick="toggleWouldReread('${m.id}','${b.id}');openDetail('${b.id}')"
-              style="padding:4px 12px;border-radius:12px;border:1px solid ${isReread?'var(--gold)':'var(--border)'};background:${isReread?'var(--gold-glow)':'transparent'};color:${isReread?'var(--gold)':'var(--muted)'};font-size:11px;cursor:pointer">
-              🔄 Would re-read${isReread?' ✓':''}</button>
-          </div>`:''}
+              style="flex:1;padding:8px;border-radius:var(--r);border:1px solid ${isReread?'var(--gold)':'var(--border)'};background:${isReread?'var(--gold-glow)':'transparent'};color:${isReread?'var(--gold)':'var(--muted)'};font-size:12px;cursor:pointer">
+              🔄 ${isReread?'Re-read ✓':'Would re-read'}</button>
+          </div>
+          `:''}
         </div>`;
       }).join('')}
     </div>`;
