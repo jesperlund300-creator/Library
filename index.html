@@ -1282,7 +1282,11 @@ textarea{resize:vertical;min-height:88px;width:100%}
         <select id="f-language" onchange="renderBookcase()" style="flex-shrink:0">
           <option value="">All languages</option>
         </select>
-        <select id="f-groupmode" onchange="renderBookcase()" style="flex-shrink:0">
+        <select id="f-wontread" onchange="renderBookcase()" style="flex-shrink:0">
+          <option value="">All books</option>
+          <option value="hide">Hide won't read</option>
+          <option value="only">Only won't read</option>
+        </select>
           <option value="author">By author</option>
           <option value="genre">By genre</option>
           <option value="tier">By tier</option>
@@ -2343,11 +2347,13 @@ function renderBookcase(){
     const totalAuthors = new Set(BOOKS.map(b=>b.author).filter(Boolean)).size;
     const genres = new Set(BOOKS.map(b=>b.genre).filter(Boolean)).size;
     const pctRead = total ? Math.round(totalRead/total*100) : 0;
+    const toRead = BOOKS.filter(b=>!MEMBERS.some(m=>(b.readBy||[]).includes(m.id))&&!b.wontRead).length;
     const stats = [
       {val:total, lbl:'Books'},
       {val:totalAuthors, lbl:'Authors'},
       {val:genres, lbl:'Genres'},
       {val:pctRead+'%', lbl:'Read'},
+      {val:toRead, lbl:'To read'},
       ...MEMBERS.map(m=>({val:BOOKS.filter(b=>(b.readBy||[]).includes(m.id)).length, lbl:m.name, color:m.color})),
     ];
     heroStatsEl.innerHTML = stats.map(s=>'<div class="col-hero-stat">'
@@ -2388,21 +2394,24 @@ function renderBookcase(){
     pillsRow.style.display = 'none';
   }
 
+  const wontReadFilter = document.getElementById('f-wontread')?.value||'';
+
   let filtered=BOOKS.filter(b=>{
     if(genre&&b.genre!==genre) return false;
     if(langFilter&&(b.language||'')!==langFilter) return false;
     if(q&&!b.title.toLowerCase().includes(q)&&!(b.author||'').toLowerCase().includes(q)) return false;
+    // Won't read filter
+    const isWont = !!b.wontRead;
+    if(wontReadFilter==='hide' && isWont) return false;
+    if(wontReadFilter==='only' && !isWont) return false;
     // Member filter
     if(filterMemberId === 'UNREAD'){
-      // Books nobody has read
       const anyRead = MEMBERS.some(m=>(b.readBy||[]).includes(m.id));
       if(anyRead) return false;
     } else if(filterMemberId && filterMemberId.startsWith('UNREAD_')){
-      // Books this specific member hasn't read
       const mid = filterMemberId.replace('UNREAD_','');
       if((b.readBy||[]).includes(mid)) return false;
     } else if(filterMemberId){
-      // Books this member HAS read
       if(!(b.readBy||[]).includes(filterMemberId)) return false;
     }
     return true;
@@ -2669,6 +2678,8 @@ function buildSpine(b){
   const wrap=document.createElement('div');
   wrap.className='book-3d';
   wrap.style.cssText=`width:${spineW}px;height:${height}px;--cover-w:${coverW};--spine-h:${height}`;
+  if(b.wontRead) wrap.style.opacity='0.35';
+  wrap.setAttribute('data-id', b.id);
 
   // ── Spine face — always typography-based, coloured by cover palette ──
   const spineEl=document.createElement('div');
@@ -6915,6 +6926,12 @@ function forceShowTooltip(bookId){
   }, 50);
 }
 
+function toggleWontRead(bookId){
+  const b=BOOKS.find(x=>x.id===bookId); if(!b) return;
+  b.wontRead = !b.wontRead;
+  markSaved(); openDetail(bookId); renderBookcase();
+}
+
 function saveReadDate(bookId, memberId, date){
   const b = BOOKS.find(x=>x.id===bookId); if(!b) return;
   if(!b.readDates) b.readDates={};
@@ -7059,9 +7076,16 @@ function openDetail(id){
   const detailBtns = document.getElementById('detail-btns');
   let readHtml = '';
   if(MEMBERS.length){
-    readHtml = `<div style="margin-bottom:16px">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--faint);margin-bottom:12px">Have you read this?</div>
-      ${MEMBERS.map(m=>{
+    const isWont = !!b.wontRead;
+    const wontBtn = `<button onclick="toggleWontRead('${b.id}')"
+      style="width:100%;padding:10px;border-radius:var(--r);border:1px solid ${isWont?'#e07070':'var(--border)'};background:${isWont?'rgba(224,112,112,.12)':'transparent'};color:${isWont?'#e07070':'var(--muted)'};font-size:13px;cursor:pointer;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span style="font-size:16px">${isWont?'🚫':'○'}</span>
+      ${isWont?'Won\'t read — tap to undo':'Mark as won\'t read'}
+    </button>`;
+
+    let memberCards = '';
+    if(!isWont){
+      memberCards = MEMBERS.map(m=>{
         const isRead=(b.readBy||[]).includes(m.id);
         const readDate=(b.readDates||{})[m.id]||'';
         const startDate=(b.readStartDates||{})[m.id]||'';
@@ -7074,57 +7098,37 @@ function openDetail(id){
           if(days>0) speed=days+' day'+(days!==1?'s':'');
           else if(days===0) speed='Same day';
         }
-
         return `<div style="border:2px solid ${isRead?m.color:'var(--border)'};border-radius:var(--rl);padding:16px;margin-bottom:12px;background:${isRead?m.color+'0d':'var(--surface)'}">
-
-          <!-- Big read toggle -->
           <button onclick="toggleRead('${b.id}','${m.id}');openDetail('${b.id}')"
             style="width:100%;padding:14px;border-radius:var(--r);border:none;background:${isRead?m.color:'var(--surface2)'};color:${isRead?'#fff':'var(--muted)'};font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:${isRead?'14px':'0'}">
             <span style="font-size:20px">${isRead?'✓':'○'}</span>
             <span>${esc(m.name)} — ${isRead?'Read':'Not read'}</span>
           </button>
-
           ${isRead?`
-          <!-- When did you read it? -->
           <div style="font-size:12px;color:var(--muted);margin-bottom:8px">When did you read it?</div>
-
-          <!-- Quick options -->
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
             <button onclick="saveReadDate('${b.id}','${m.id}','${new Date().toISOString().slice(0,10)}');openDetail('${b.id}')"
-              style="padding:8px 14px;border-radius:20px;border:1px solid ${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--border)'};background:${readDate===new Date().toISOString().slice(0,10)?m.color+'22':'var(--surface2)'};color:${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--muted)'};font-size:13px;cursor:pointer">
-              Today</button>
+              style="padding:8px 14px;border-radius:20px;border:1px solid ${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--border)'};background:${readDate===new Date().toISOString().slice(0,10)?m.color+'22':'var(--surface2)'};color:${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--muted)'};font-size:13px;cursor:pointer">Today</button>
             <button onclick="saveReadDate('${b.id}','${m.id}','${new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01'}');openDetail('${b.id}')"
-              style="padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;cursor:pointer">
-              This month</button>
+              style="padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;cursor:pointer">This month</button>
             <button onclick="saveReadDate('${b.id}','${m.id}','');openDetail('${b.id}')"
-              style="padding:8px 14px;border-radius:20px;border:1px solid ${!hasDate?m.color:'var(--border)'};background:${!hasDate?m.color+'22':'var(--surface2)'};color:${!hasDate?m.color:'var(--muted)'};font-size:13px;cursor:pointer">
-              Don't know</button>
+              style="padding:8px 14px;border-radius:20px;border:1px solid ${!hasDate?m.color:'var(--border)'};background:${!hasDate?m.color+'22':'var(--surface2)'};color:${!hasDate?m.color:'var(--muted)'};font-size:13px;cursor:pointer">Don't know</button>
           </div>
-
-          <!-- Exact date picker (collapsible) -->
           <details style="margin-bottom:10px">
             <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px">
               <span style="font-size:14px">📅</span>
               ${hasDate?'Finished: <strong style="color:'+m.color+'">'+readDate+'</strong>':'Set exact date'}
             </summary>
             <div style="padding:10px 0 4px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <div>
-                <div style="font-size:11px;color:var(--faint);margin-bottom:4px">Started (optional)</div>
-                <input type="date" value="${startDate}"
-                  onchange="saveStartDate('${b.id}','${m.id}',this.value)"
-                  style="width:100%;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark">
-              </div>
-              <div>
-                <div style="font-size:11px;color:var(--faint);margin-bottom:4px">Finished</div>
-                <input type="date" value="${readDate}"
-                  onchange="saveReadDate('${b.id}','${m.id}',this.value)"
-                  style="width:100%;border:1px solid ${hasDate?m.color+'66':'var(--border)'};border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark">
-              </div>
+              <div><div style="font-size:11px;color:var(--faint);margin-bottom:4px">Started (optional)</div>
+                <input type="date" value="${startDate}" onchange="saveStartDate('${b.id}','${m.id}',this.value)"
+                  style="width:100%;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark"></div>
+              <div><div style="font-size:11px;color:var(--faint);margin-bottom:4px">Finished</div>
+                <input type="date" value="${readDate}" onchange="saveReadDate('${b.id}','${m.id}',this.value)"
+                  style="width:100%;border:1px solid ${hasDate?m.color+'66':'var(--border)'};border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark"></div>
             </div>
             ${speed?`<div style="font-size:12px;color:var(--gold);padding-top:4px">⚡ Read in ${speed}</div>`:''}
           </details>
-
-          <!-- Fav + reread -->
           <div style="display:flex;gap:8px">
             <button onclick="toggleAllTimeFav('${m.id}','${b.id}');openDetail('${b.id}')"
               style="flex:1;padding:8px;border-radius:var(--r);border:1px solid ${isFav?'var(--gold)':'var(--border)'};background:${isFav?'var(--gold-glow)':'transparent'};color:${isFav?'var(--gold)':'var(--muted)'};font-size:12px;cursor:pointer">
@@ -7135,8 +7139,9 @@ function openDetail(id){
           </div>
           `:''}
         </div>`;
-      }).join('')}
-    </div>`;
+      }).join('');
+    }
+    readHtml = `<div style="margin-bottom:16px">${wontBtn}${memberCards}</div>`;
   }
   const readSectionEl = document.getElementById('detail-read-section');
   if(readSectionEl) readSectionEl.innerHTML = readHtml;
