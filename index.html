@@ -2347,7 +2347,7 @@ function renderBookcase(){
     const totalAuthors = new Set(BOOKS.map(b=>b.author).filter(Boolean)).size;
     const genres = new Set(BOOKS.map(b=>b.genre).filter(Boolean)).size;
     const pctRead = total ? Math.round(totalRead/total*100) : 0;
-    const toRead = BOOKS.filter(b=>!MEMBERS.some(m=>(b.readBy||[]).includes(m.id))&&!b.wontRead).length;
+    const toRead = BOOKS.filter(b=>!MEMBERS.some(m=>(b.readBy||[]).includes(m.id))&&!MEMBERS.every(m=>(b.wontRead||{})[m.id])).length;
     const stats = [
       {val:total, lbl:'Books'},
       {val:totalAuthors, lbl:'Authors'},
@@ -2400,10 +2400,26 @@ function renderBookcase(){
     if(genre&&b.genre!==genre) return false;
     if(langFilter&&(b.language||'')!==langFilter) return false;
     if(q&&!b.title.toLowerCase().includes(q)&&!(b.author||'').toLowerCase().includes(q)) return false;
-    // Won't read filter
+    // Won't read filter — based on active member filter or all members
     const isWont = !!b.wontRead;
-    if(wontReadFilter==='hide' && isWont) return false;
-    if(wontReadFilter==='only' && !isWont) return false;
+    if(wontReadFilter==='hide'){
+      if(filterMemberId && !filterMemberId.startsWith('UNREAD')){
+        // Filter by specific member's won't read
+        const mid = filterMemberId.replace('UNREAD_','');
+        if((b.wontRead||{})[mid]) return false;
+      } else {
+        // Hide if ALL members have marked won't read
+        if(MEMBERS.length && MEMBERS.every(m=>(b.wontRead||{})[m.id])) return false;
+      }
+    }
+    if(wontReadFilter==='only'){
+      if(filterMemberId && !filterMemberId.startsWith('UNREAD')){
+        const mid = filterMemberId.replace('UNREAD_','');
+        if(!(b.wontRead||{})[mid]) return false;
+      } else {
+        if(!MEMBERS.some(m=>(b.wontRead||{})[m.id])) return false;
+      }
+    }
     // Member filter
     if(filterMemberId === 'UNREAD'){
       const anyRead = MEMBERS.some(m=>(b.readBy||[]).includes(m.id));
@@ -2678,7 +2694,7 @@ function buildSpine(b){
   const wrap=document.createElement('div');
   wrap.className='book-3d';
   wrap.style.cssText=`width:${spineW}px;height:${height}px;--cover-w:${coverW};--spine-h:${height}`;
-  if(b.wontRead) wrap.style.opacity='0.35';
+  if(b.wontRead && MEMBERS.length && MEMBERS.every(m=>(b.wontRead||{})[m.id])) wrap.style.opacity='0.35';
   wrap.setAttribute('data-id', b.id);
 
   // ── Spine face — always typography-based, coloured by cover palette ──
@@ -6926,9 +6942,10 @@ function forceShowTooltip(bookId){
   }, 50);
 }
 
-function toggleWontRead(bookId){
+function toggleWontRead(bookId, memberId){
   const b=BOOKS.find(x=>x.id===bookId); if(!b) return;
-  b.wontRead = !b.wontRead;
+  if(!b.wontRead) b.wontRead={};
+  b.wontRead[memberId] = !b.wontRead[memberId];
   markSaved(); openDetail(bookId); renderBookcase();
 }
 
@@ -7076,72 +7093,82 @@ function openDetail(id){
   const detailBtns = document.getElementById('detail-btns');
   let readHtml = '';
   if(MEMBERS.length){
-    const isWont = !!b.wontRead;
-    const wontBtn = `<button onclick="toggleWontRead('${b.id}')"
-      style="width:100%;padding:10px;border-radius:var(--r);border:1px solid ${isWont?'#e07070':'var(--border)'};background:${isWont?'rgba(224,112,112,.12)':'transparent'};color:${isWont?'#e07070':'var(--muted)'};font-size:13px;cursor:pointer;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px">
-      <span style="font-size:16px">${isWont?'🚫':'○'}</span>
-      ${isWont?'Won\'t read — tap to undo':'Mark as won\'t read'}
-    </button>`;
 
     let memberCards = '';
-    if(!isWont){
-      memberCards = MEMBERS.map(m=>{
-        const isRead=(b.readBy||[]).includes(m.id);
-        const readDate=(b.readDates||{})[m.id]||'';
-        const startDate=(b.readStartDates||{})[m.id]||'';
-        const hasDate=readDate&&readDate.length>0;
-        const isFav=(b.allTimeFav||[]).includes(m.id);
-        const isReread=!!(b.wouldReread||{})[m.id];
-        let speed='';
-        if(startDate&&hasDate){
-          const days=Math.round((new Date(readDate)-new Date(startDate))/86400000);
-          if(days>0) speed=days+' day'+(days!==1?'s':'');
-          else if(days===0) speed='Same day';
-        }
-        return `<div style="border:2px solid ${isRead?m.color:'var(--border)'};border-radius:var(--rl);padding:16px;margin-bottom:12px;background:${isRead?m.color+'0d':'var(--surface)'}">
-          <button onclick="toggleRead('${b.id}','${m.id}');openDetail('${b.id}')"
-            style="width:100%;padding:14px;border-radius:var(--r);border:none;background:${isRead?m.color:'var(--surface2)'};color:${isRead?'#fff':'var(--muted)'};font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:${isRead?'14px':'0'}">
-            <span style="font-size:20px">${isRead?'✓':'○'}</span>
-            <span>${esc(m.name)} — ${isRead?'Read':'Not read'}</span>
-          </button>
-          ${isRead?`
-          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">When did you read it?</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <button onclick="saveReadDate('${b.id}','${m.id}','${new Date().toISOString().slice(0,10)}');openDetail('${b.id}')"
-              style="padding:8px 14px;border-radius:20px;border:1px solid ${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--border)'};background:${readDate===new Date().toISOString().slice(0,10)?m.color+'22':'var(--surface2)'};color:${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--muted)'};font-size:13px;cursor:pointer">Today</button>
-            <button onclick="saveReadDate('${b.id}','${m.id}','${new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01'}');openDetail('${b.id}')"
-              style="padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;cursor:pointer">This month</button>
-            <button onclick="saveReadDate('${b.id}','${m.id}','');openDetail('${b.id}')"
-              style="padding:8px 14px;border-radius:20px;border:1px solid ${!hasDate?m.color:'var(--border)'};background:${!hasDate?m.color+'22':'var(--surface2)'};color:${!hasDate?m.color:'var(--muted)'};font-size:13px;cursor:pointer">Don't know</button>
+    memberCards = MEMBERS.map(m=>{
+      const isRead=(b.readBy||[]).includes(m.id);
+      const isWontM = !!(b.wontRead||{})[m.id];
+      const readDate=(b.readDates||{})[m.id]||'';
+      const startDate=(b.readStartDates||{})[m.id]||'';
+      const hasDate=readDate&&readDate.length>0;
+      const isFav=(b.allTimeFav||[]).includes(m.id);
+      const isReread=!!(b.wouldReread||{})[m.id];
+      let speed='';
+      if(startDate&&hasDate){
+        const days=Math.round((new Date(readDate)-new Date(startDate))/86400000);
+        if(days>0) speed=days+' day'+(days!==1?'s':'');
+        else if(days===0) speed='Same day';
+      }
+      return `<div style="border:2px solid ${isRead?m.color:isWontM?'#e07070':'var(--border)'};border-radius:var(--rl);padding:16px;margin-bottom:12px;background:${isRead?m.color+'0d':isWontM?'rgba(224,112,112,.06)':'var(--surface)'}">
+        <!-- Member name -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="width:10px;height:10px;border-radius:50%;background:${m.color};flex-shrink:0"></span>
+          <span style="font-size:13px;font-weight:600;color:var(--text)">${esc(m.name)}</span>
+        </div>
+        ${isWontM?`
+        <!-- Won't read state -->
+        <button onclick="toggleWontRead('${b.id}','${m.id}')"
+          style="width:100%;padding:10px;border-radius:var(--r);border:1px solid #e07070;background:rgba(224,112,112,.12);color:#e07070;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+          <span>🚫</span> Won't read — tap to undo
+        </button>
+        `:`
+        <button onclick="toggleRead('${b.id}','${m.id}');openDetail('${b.id}')"
+          style="width:100%;padding:14px;border-radius:var(--r);border:none;background:${isRead?m.color:'var(--surface2)'};color:${isRead?'#fff':'var(--muted)'};font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:${isRead?'14px':'6px'}">
+          <span style="font-size:20px">${isRead?'✓':'○'}</span>
+          <span>${isRead?'Read':'Not read'}</span>
+        </button>
+        ${!isRead?`<button onclick="toggleWontRead('${b.id}','${m.id}')"
+          style="width:100%;padding:7px;border-radius:var(--r);border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;margin-bottom:0">
+          🚫 Won't read
+        </button>`:''}
+        ${isRead?`
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">When did you read it?</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button onclick="saveReadDate('${b.id}','${m.id}','${new Date().toISOString().slice(0,10)}');openDetail('${b.id}')"
+            style="padding:8px 14px;border-radius:20px;border:1px solid ${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--border)'};background:${readDate===new Date().toISOString().slice(0,10)?m.color+'22':'var(--surface2)'};color:${readDate===new Date().toISOString().slice(0,10)?m.color:'var(--muted)'};font-size:13px;cursor:pointer">Today</button>
+          <button onclick="saveReadDate('${b.id}','${m.id}','${new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01'}');openDetail('${b.id}')"
+            style="padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:13px;cursor:pointer">This month</button>
+          <button onclick="saveReadDate('${b.id}','${m.id}','');openDetail('${b.id}')"
+            style="padding:8px 14px;border-radius:20px;border:1px solid ${!hasDate?m.color:'var(--border)'};background:${!hasDate?m.color+'22':'var(--surface2)'};color:${!hasDate?m.color:'var(--muted)'};font-size:13px;cursor:pointer">Don't know</button>
+        </div>
+        <details style="margin-bottom:10px">
+          <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px">
+            <span>📅</span>
+            ${hasDate?'Finished: <strong style="color:'+m.color+'">'+readDate+'</strong>':'Set exact date'}
+          </summary>
+          <div style="padding:10px 0 4px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><div style="font-size:11px;color:var(--faint);margin-bottom:4px">Started (optional)</div>
+              <input type="date" value="${startDate}" onchange="saveStartDate('${b.id}','${m.id}',this.value)"
+                style="width:100%;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark"></div>
+            <div><div style="font-size:11px;color:var(--faint);margin-bottom:4px">Finished</div>
+              <input type="date" value="${readDate}" onchange="saveReadDate('${b.id}','${m.id}',this.value)"
+                style="width:100%;border:1px solid ${hasDate?m.color+'66':'var(--border)'};border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark"></div>
           </div>
-          <details style="margin-bottom:10px">
-            <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px">
-              <span style="font-size:14px">📅</span>
-              ${hasDate?'Finished: <strong style="color:'+m.color+'">'+readDate+'</strong>':'Set exact date'}
-            </summary>
-            <div style="padding:10px 0 4px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <div><div style="font-size:11px;color:var(--faint);margin-bottom:4px">Started (optional)</div>
-                <input type="date" value="${startDate}" onchange="saveStartDate('${b.id}','${m.id}',this.value)"
-                  style="width:100%;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark"></div>
-              <div><div style="font-size:11px;color:var(--faint);margin-bottom:4px">Finished</div>
-                <input type="date" value="${readDate}" onchange="saveReadDate('${b.id}','${m.id}',this.value)"
-                  style="width:100%;border:1px solid ${hasDate?m.color+'66':'var(--border)'};border-radius:var(--r);background:var(--surface2);color:var(--text);padding:8px;font-size:13px;box-sizing:border-box;color-scheme:dark"></div>
-            </div>
-            ${speed?`<div style="font-size:12px;color:var(--gold);padding-top:4px">⚡ Read in ${speed}</div>`:''}
-          </details>
-          <div style="display:flex;gap:8px">
-            <button onclick="toggleAllTimeFav('${m.id}','${b.id}');openDetail('${b.id}')"
-              style="flex:1;padding:8px;border-radius:var(--r);border:1px solid ${isFav?'var(--gold)':'var(--border)'};background:${isFav?'var(--gold-glow)':'transparent'};color:${isFav?'var(--gold)':'var(--muted)'};font-size:12px;cursor:pointer">
-              ⭐ ${isFav?'All-time fav ✓':'All-time fav'}</button>
-            <button onclick="toggleWouldReread('${m.id}','${b.id}');openDetail('${b.id}')"
-              style="flex:1;padding:8px;border-radius:var(--r);border:1px solid ${isReread?'var(--gold)':'var(--border)'};background:${isReread?'var(--gold-glow)':'transparent'};color:${isReread?'var(--gold)':'var(--muted)'};font-size:12px;cursor:pointer">
-              🔄 ${isReread?'Re-read ✓':'Would re-read'}</button>
-          </div>
-          `:''}
-        </div>`;
-      }).join('');
-    }
-    readHtml = `<div style="margin-bottom:16px">${wontBtn}${memberCards}</div>`;
+          ${speed?`<div style="font-size:12px;color:var(--gold);padding-top:4px">⚡ Read in ${speed}</div>`:''}
+        </details>
+        <div style="display:flex;gap:8px">
+          <button onclick="toggleAllTimeFav('${m.id}','${b.id}');openDetail('${b.id}')"
+            style="flex:1;padding:8px;border-radius:var(--r);border:1px solid ${isFav?'var(--gold)':'var(--border)'};background:${isFav?'var(--gold-glow)':'transparent'};color:${isFav?'var(--gold)':'var(--muted)'};font-size:12px;cursor:pointer">
+            ⭐ ${isFav?'All-time fav ✓':'All-time fav'}</button>
+          <button onclick="toggleWouldReread('${m.id}','${b.id}');openDetail('${b.id}')"
+            style="flex:1;padding:8px;border-radius:var(--r);border:1px solid ${isReread?'var(--gold)':'var(--border)'};background:${isReread?'var(--gold-glow)':'transparent'};color:${isReread?'var(--gold)':'var(--muted)'};font-size:12px;cursor:pointer">
+            🔄 ${isReread?'Re-read ✓':'Would re-read'}</button>
+        </div>
+        `:''}
+        `}
+      </div>`;
+    }).join('');
+    readHtml = `<div style="margin-bottom:16px">${memberCards}</div>`;
   }
   const readSectionEl = document.getElementById('detail-read-section');
   if(readSectionEl) readSectionEl.innerHTML = readHtml;
