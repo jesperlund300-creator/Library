@@ -2400,22 +2400,24 @@ function renderBookcase(){
     if(genre&&b.genre!==genre) return false;
     if(langFilter&&(b.language||'')!==langFilter) return false;
     if(q&&!b.title.toLowerCase().includes(q)&&!(b.author||'').toLowerCase().includes(q)) return false;
-    // Won't read filter — based on active member filter or all members
-    const isWont = !!b.wontRead;
+    // Won't read filter
     if(wontReadFilter==='hide'){
-      if(filterMemberId && !filterMemberId.startsWith('UNREAD')){
-        // Filter by specific member's won't read
-        const mid = filterMemberId.replace('UNREAD_','');
-        if((b.wontRead||{})[mid]) return false;
+      // Hide if ANY member has marked won't read (or specific member if filtered)
+      const checkMid = (filterMemberId && !filterMemberId.startsWith('UNREAD'))
+        ? filterMemberId.replace('UNREAD_','')
+        : null;
+      if(checkMid){
+        if((b.wontRead||{})[checkMid]) return false;
       } else {
-        // Hide if ALL members have marked won't read
-        if(MEMBERS.length && MEMBERS.every(m=>(b.wontRead||{})[m.id])) return false;
+        if(MEMBERS.some(m=>(b.wontRead||{})[m.id])) return false;
       }
     }
     if(wontReadFilter==='only'){
-      if(filterMemberId && !filterMemberId.startsWith('UNREAD')){
-        const mid = filterMemberId.replace('UNREAD_','');
-        if(!(b.wontRead||{})[mid]) return false;
+      const checkMid = (filterMemberId && !filterMemberId.startsWith('UNREAD'))
+        ? filterMemberId.replace('UNREAD_','')
+        : null;
+      if(checkMid){
+        if(!(b.wontRead||{})[checkMid]) return false;
       } else {
         if(!MEMBERS.some(m=>(b.wontRead||{})[m.id])) return false;
       }
