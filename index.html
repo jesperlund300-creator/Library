@@ -2320,7 +2320,7 @@ function lastName(author){
 function renderBookcase(){
   renderNowReading();
   const q=(document.getElementById('f-q').value||'').toLowerCase();
-  const genre=document.getElementById('f-genre').value;
+  const genre = document.getElementById('f-genre')?.value||'';
   const langFilter=document.getElementById('f-language')?.value||'';
   const allG=[...new Set(BOOKS.map(b=>b.genre))].filter(Boolean).sort();
   const gSel=document.getElementById('f-genre'),prev=gSel.value;
@@ -2446,21 +2446,32 @@ function renderBookcase(){
   }
   emptyEl.style.display='none';
 
+  const genreFilter = document.getElementById('f-genre')?.value||'';
   const groupMode = document.getElementById('f-groupmode')?.value || 'author';
+
+  // When a genre is selected, auto-switch to subgenre grouping
+  const effectiveGroupMode = (genreFilter && groupMode === 'author') ? 'subgenre' : groupMode;
 
   // Show/hide shelf management bar
   const shelfBar = document.getElementById('shelf-manage-bar');
-  if(shelfBar) shelfBar.style.display = groupMode==='shelf' ? 'flex' : 'none';
+  if(shelfBar) shelfBar.style.display = effectiveGroupMode==='shelf' ? 'flex' : 'none';
   const bcBar = document.getElementById('bookcase-manage-bar');
-  if(bcBar) bcBar.style.display = groupMode==='bookcase' ? 'flex' : 'none';
-  // Hide genre filter in non-genre modes
+  if(bcBar) bcBar.style.display = effectiveGroupMode==='bookcase' ? 'flex' : 'none';
+  // Hide genre filter in genre grouping mode (it's redundant)
   const genreSel2 = document.getElementById('f-genre');
-  if(genreSel2) genreSel2.style.display = groupMode==='genre' ? '' : 'none';
+  if(genreSel2) genreSel2.style.display = effectiveGroupMode==='genre' ? 'none' : '';
 
   // Build groups based on mode
   let groups = []; // [{label, color, books}]
 
-  if(groupMode === 'shelf'){
+  if(effectiveGroupMode === 'subgenre'){
+    // Group by subgenre within the selected genre
+    const subs = [...new Set(filtered.map(b=>b.subgenre||'Other'))].sort((a,b)=>a==='Other'?1:b==='Other'?-1:a.localeCompare(b));
+    subs.forEach(s => {
+      const books = filtered.filter(b=>(b.subgenre||'Other')===s).sort(sortByAuthorSeries);
+      if(books.length) groups.push({label:s, books});
+    });
+  } else if(effectiveGroupMode === 'shelf'){
     // Custom shelves — each shelf is a group, plus Unshelved
     SHELVES.forEach(shelf => {
       const books = filtered.filter(b=>b.shelfId===shelf.id)
@@ -2470,19 +2481,19 @@ function renderBookcase(){
     const unshelved = filtered.filter(b=>!b.shelfId||!SHELVES.find(s=>s.id===b.shelfId))
       .sort((a,b)=>{ const la=lastName(a.author),lb=lastName(b.author); return la!==lb?la.localeCompare(lb):a.title.localeCompare(b.title); });
     if(unshelved.length) groups.push({label:'Unshelved', color:'var(--faint)', books:unshelved});
-  } else if(groupMode === 'genre'){
+  } else if(effectiveGroupMode === 'genre'){
     const genres = [...new Set(filtered.map(b=>b.genre||'Unknown'))].sort();
     genres.forEach(g => {
       const books = filtered.filter(b=>(b.genre||'Unknown')===g).sort((a,b)=>lastName(a.author).localeCompare(lastName(b.author)));
       groups.push({label:g, books});
     });
-  } else if(groupMode === 'tier'){
+  } else if(effectiveGroupMode === 'tier'){
     const tierOrder = ['S','A','B','C','D',''];
     tierOrder.forEach(t => {
       const books = filtered.filter(b=>(b.tier||'')===t).sort((a,b)=>lastName(a.author).localeCompare(lastName(b.author)));
       if(books.length) groups.push({label:t?TM[t].label:'Unrated', color:t?TM[t].color:'', books});
     });
-  } else if(groupMode === 'year'){
+  } else if(effectiveGroupMode === 'year'){
     // Group by decade
     const decades = [...new Set(filtered.map(b=>{
       const y=parseInt(b.year)||0; return y?Math.floor(y/10)*10:0;
@@ -2492,7 +2503,7 @@ function renderBookcase(){
         .sort((a,b)=>a.title.localeCompare(b.title));
       groups.push({label:d?`${d}s`:'Unknown year', books});
     });
-  } else if(groupMode === 'bookcase'){
+  } else if(effectiveGroupMode === 'bookcase'){
     // Handled separately below — skip normal group logic
   } else {
     // Default: by author, then series order, then title
@@ -2507,7 +2518,7 @@ function renderBookcase(){
   if(availW <= 20){ setTimeout(renderBookcase, 100); return; }
 
   // ── BOOKCASE MODE: render physical bookcases ──
-  if(groupMode === 'bookcase'){
+  if(effectiveGroupMode === 'bookcase'){
     if(!BOOKCASES.length){
       const hint = document.getElementById('bookcase-manage-hint');
       if(hint) hint.textContent = 'Click "Configure bookcases" to set up yours first';
