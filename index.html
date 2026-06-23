@@ -685,6 +685,35 @@ textarea{resize:vertical;min-height:88px;width:100%}
 .tab-add-btn.active .tab-add-icon{transform:scale(0.95)}
 
 
+/* ── LIST VIEW ─────────────────────────────────────────────── */
+.book-list-row{
+  display:flex;align-items:center;gap:12px;padding:10px 14px;
+  border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;
+}
+.book-list-row:hover{background:var(--surface2)}
+.book-list-cover{width:32px;height:46px;border-radius:2px;flex-shrink:0;object-fit:cover}
+.book-list-info{flex:1;min-width:0}
+.book-list-title{font-size:14px;color:var(--text);font-family:'Fraunces',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.book-list-meta{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.book-list-tier{
+  width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-size:13px;flex-shrink:0;
+}
+.book-list-readdots{display:flex;gap:3px;flex-shrink:0}
+.book-list-section-hd{
+  font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
+  padding:14px 14px 8px;background:var(--surface);position:sticky;top:0;
+}
+/* ── ACTIVE TO-READ SHELF ─────────────────────────────────────── */
+.active-toread-card{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  cursor:pointer;transition:border-color .12s;flex-shrink:0;width:160px;
+}
+.active-toread-card:hover{border-color:var(--border2)}
+.active-toread-scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none}
+.active-toread-scroll::-webkit-scrollbar{display:none}
+
 .game-section{margin-bottom:28px;overflow:hidden;width:100%}
 .game-section-title{font-size:13px;font-weight:500;color:var(--text);margin:0 0 12px;display:flex;align-items:center;gap:8px}
 .badge-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px}
@@ -1295,6 +1324,12 @@ textarea{resize:vertical;min-height:88px;width:100%}
           <option value="shelf">Shelf</option>
           <option value="bookcase">Bookcase</option>
         </select>
+        <div style="display:flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;flex-shrink:0">
+          <button id="view-toggle-shelf" onclick="setCollectionView('shelf')" title="Shelf view"
+            style="padding:7px 10px;background:var(--gold-glow);border:none;color:var(--gold);cursor:pointer;font-size:14px;line-height:1">📚</button>
+          <button id="view-toggle-list" onclick="setCollectionView('list')" title="List view"
+            style="padding:7px 10px;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;border-left:1px solid var(--border)">☰</button>
+        </div>
       </div>
       <!-- Shelf management bar (only shown in shelf mode) -->
       <div id="shelf-manage-bar" style="display:none;margin-bottom:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1328,6 +1363,11 @@ textarea{resize:vertical;min-height:88px;width:100%}
       </div>
       <div class="col-body">
       <div id="f-members-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"></div>
+
+      <!-- Active "to read" shelf -->
+      <div id="active-toread-section" style="margin-bottom:20px"></div>
+
+      <!-- Shelf view -->
       <div class="bookcase" id="bookcase">
         <div class="bc-empty" id="bc-empty">
           <div style="font-size:40px;margin-bottom:14px;opacity:.2">📚</div>
@@ -1335,6 +1375,9 @@ textarea{resize:vertical;min-height:88px;width:100%}
           <small>Add your first book to fill them up</small>
         </div>
       </div>
+
+      <!-- List view -->
+      <div id="collection-list-view" style="display:none"></div>
       </div>
     </div>
 
@@ -2317,8 +2360,112 @@ function lastName(author){
   return parts[parts.length-1].toLowerCase();
 }
 
+// ── COLLECTION VIEW TOGGLE (shelf/list) ───────────────────────
+let _collectionView = 'shelf';
+try{ _collectionView = localStorage.getItem('mlCollectionView')||'shelf'; }catch(e){}
+
+function setCollectionView(view){
+  _collectionView = view;
+  try{ localStorage.setItem('mlCollectionView', view); }catch(e){}
+  const shelfBtn=document.getElementById('view-toggle-shelf');
+  const listBtn=document.getElementById('view-toggle-list');
+  if(shelfBtn){ shelfBtn.style.background = view==='shelf'?'var(--gold-glow)':'transparent'; shelfBtn.style.color = view==='shelf'?'var(--gold)':'var(--muted)'; }
+  if(listBtn){ listBtn.style.background = view==='list'?'var(--gold-glow)':'transparent'; listBtn.style.color = view==='list'?'var(--gold)':'var(--muted)'; }
+  document.getElementById('bookcase').style.display = view==='shelf' ? '' : 'none';
+  document.getElementById('collection-list-view').style.display = view==='list' ? '' : 'none';
+  renderBookcase();
+}
+
+// ── ACTIVE "TO READ" SHELF ─────────────────────────────────────
+function renderActiveToReadSection(){
+  const el = document.getElementById('active-toread-section');
+  if(!el) return;
+  if(!MEMBERS.length){ el.innerHTML=''; return; }
+
+  // Books nobody has read and nobody has marked won't-read
+  const toRead = BOOKS.filter(b=>
+    !MEMBERS.some(m=>(b.readBy||[]).includes(m.id)) &&
+    !MEMBERS.every(m=>(b.wontRead||{})[m.id])
+  );
+
+  if(!toRead.length){ el.innerHTML=''; return; }
+
+  // Sort: currently-reading/next-up first, then by added date (newest first)
+  const sorted = [...toRead].sort((a,b)=>(b.added||0)-(a.added||0));
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:var(--text)">📖 To read <span style="color:var(--muted);font-weight:400">(${toRead.length})</span></div>
+    </div>
+    <div class="active-toread-scroll">
+      ${sorted.slice(0,30).map(b=>{
+        const cov=getCoverUrl(b,'S');
+        return `<div class="active-toread-card" onclick="openDetail('${b.id}')">
+          ${cov?`<img src="${cov}" style="width:30px;height:44px;object-fit:cover;border-radius:2px;flex-shrink:0" onerror="this.style.display='none'" alt="">`:
+               `<div style="width:30px;height:44px;border-radius:2px;flex-shrink:0;background:${bookPalette(b).spine}"></div>`}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:var(--text);font-family:'Fraunces',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.title)}</div>
+            <div style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.author||'')}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// ── LIST VIEW ────────────────────────────────────────────────
+function renderListView(filtered, groupMode){
+  const el = document.getElementById('collection-list-view');
+  if(!el) return;
+
+  if(!filtered.length){
+    el.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--faint)"><div style="font-size:32px;opacity:.3;margin-bottom:10px">📚</div>No books match your filters</div>';
+    return;
+  }
+
+  // Build same groups as shelf view for consistency
+  let groups = [];
+  if(groupMode==='subgenre'){
+    const subs=[...new Set(filtered.map(b=>b.subgenre||'Other'))].sort((a,b)=>a==='Other'?1:b==='Other'?-1:a.localeCompare(b));
+    subs.forEach(s=>{ const books=filtered.filter(b=>(b.subgenre||'Other')===s).sort(sortByAuthorSeries); if(books.length) groups.push({label:s,books}); });
+  } else if(groupMode==='genre'){
+    const genres=[...new Set(filtered.map(b=>b.genre||'Unknown'))].sort();
+    genres.forEach(g=>{ const books=filtered.filter(b=>(b.genre||'Unknown')===g).sort((a,b)=>lastName(a.author).localeCompare(lastName(b.author))); groups.push({label:g,books}); });
+  } else if(groupMode==='tier'){
+    ['S','A','B','C','D',''].forEach(t=>{ const books=filtered.filter(b=>(b.tier||'')===t).sort((a,b)=>lastName(a.author).localeCompare(lastName(b.author))); if(books.length) groups.push({label:t?TM[t].label:'Unrated',books}); });
+  } else if(groupMode==='year'){
+    const decades=[...new Set(filtered.map(b=>{ const y=parseInt(b.year)||0; return y?Math.floor(y/10)*10:0; }))].sort((a,b)=>b-a);
+    decades.forEach(d=>{ const books=filtered.filter(b=>{ const y=parseInt(b.year)||0; return d===0?!y:(Math.floor(y/10)*10===d); }).sort((a,b)=>a.title.localeCompare(b.title)); groups.push({label:d?`${d}s`:'Unknown year',books}); });
+  } else {
+    filtered.sort(sortByAuthorSeries);
+    groups.push({label:null,books:filtered});
+  }
+
+  el.innerHTML = groups.map(g=>{
+    const rows = g.books.map(b=>{
+      const cov=getCoverUrl(b,'S');
+      const readDots = MEMBERS.map(m=>{
+        const isRead=(b.readBy||[]).includes(m.id);
+        return `<span style="width:8px;height:8px;border-radius:50%;background:${isRead?m.color:'var(--border)'}" title="${esc(m.name)}: ${isRead?'Read':'Not read'}"></span>`;
+      }).join('');
+      const tierColor = b.tier ? TM[b.tier]?.color : null;
+      return `<div class="book-list-row" onclick="openDetail('${b.id}')">
+        ${cov?`<img class="book-list-cover" src="${cov}" onerror="this.style.display='none'" alt="">`:
+             `<div class="book-list-cover" style="background:${bookPalette(b).spine}"></div>`}
+        <div class="book-list-info">
+          <div class="book-list-title">${esc(b.title)}</div>
+          <div class="book-list-meta">${esc(b.author||'')}${b.year?' · '+b.year:''}${b.genre?' · '+esc(b.genre):''}</div>
+        </div>
+        ${b.tier?`<div class="book-list-tier" style="background:${tierColor}22;color:${tierColor}">${b.tier}</div>`:''}
+        <div class="book-list-readdots">${readDots}</div>
+      </div>`;
+    }).join('');
+    return (g.label?`<div class="book-list-section-hd">${esc(g.label)} <span style="color:var(--faint)">(${g.books.length})</span></div>`:'') + rows;
+  }).join('');
+}
+
 function renderBookcase(){
   renderNowReading();
+  renderActiveToReadSection();
   const q=(document.getElementById('f-q').value||'').toLowerCase();
   const genre = document.getElementById('f-genre')?.value||'';
   const langFilter=document.getElementById('f-language')?.value||'';
@@ -2451,6 +2598,19 @@ function renderBookcase(){
 
   // When a genre is selected, auto-switch to subgenre grouping
   const effectiveGroupMode = (genreFilter && groupMode === 'author') ? 'subgenre' : groupMode;
+
+  // ── LIST VIEW: render and exit early ──
+  if(_collectionView === 'list'){
+    document.getElementById('bookcase').style.display = 'none';
+    document.getElementById('collection-list-view').style.display = '';
+    const shelfBar0 = document.getElementById('shelf-manage-bar'); if(shelfBar0) shelfBar0.style.display='none';
+    const bcBar0 = document.getElementById('bookcase-manage-bar'); if(bcBar0) bcBar0.style.display='none';
+    const genreSel0 = document.getElementById('f-genre'); if(genreSel0) genreSel0.style.display='';
+    renderListView(filtered, effectiveGroupMode);
+    return;
+  }
+  document.getElementById('bookcase').style.display = '';
+  document.getElementById('collection-list-view').style.display = 'none';
 
   // Show/hide shelf management bar
   const shelfBar = document.getElementById('shelf-manage-bar');
@@ -7899,6 +8059,16 @@ markSaved = function(){
 // Load data — localStorage takes priority over embedded data
 loadFromLocalStorage();
 
+// Initialize collection view toggle button states
+(function initCollectionViewUI(){
+  const shelfBtn=document.getElementById('view-toggle-shelf');
+  const listBtn=document.getElementById('view-toggle-list');
+  if(shelfBtn) shelfBtn.style.background = _collectionView==='shelf'?'var(--gold-glow)':'transparent';
+  if(shelfBtn) shelfBtn.style.color = _collectionView==='shelf'?'var(--gold)':'var(--muted)';
+  if(listBtn) listBtn.style.background = _collectionView==='list'?'var(--gold-glow)':'transparent';
+  if(listBtn) listBtn.style.color = _collectionView==='list'?'var(--gold)':'var(--muted)';
+})();
+
 // Render add-form tier pickers on first load
 renderAddTierRows();
 loadBcStyle();
@@ -7914,22 +8084,24 @@ applyWoodGrain();
   }
 })();
 
-// Register service worker for PWA offline support
+// Register service worker for PWA offline support — only if sw.js actually exists
+// (avoids noisy 404 errors when previewing this file outside its real deployment)
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js')
-      .then(reg=>{
-        // Check for updates every time the app is focused
-        reg.update();
-        document.addEventListener('visibilitychange', ()=>{
-          if(!document.hidden) reg.update();
-        });
-        // When a new service worker takes over, reload the page
-        navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-          window.location.reload();
-        });
-      })
-      .catch(err=>console.log('SW failed:', err));
+    fetch('sw.js', {method:'HEAD'}).then(res=>{
+      if(!res.ok) return; // sw.js not hosted here — skip silently (e.g. preview environment)
+      navigator.serviceWorker.register('sw.js')
+        .then(reg=>{
+          reg.update();
+          document.addEventListener('visibilitychange', ()=>{
+            if(!document.hidden) reg.update();
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+            window.location.reload();
+          });
+        })
+        .catch(err=>console.log('SW failed:', err));
+    }).catch(()=>{}); // fetch itself failed — skip silently
   });
 }
 </script>
